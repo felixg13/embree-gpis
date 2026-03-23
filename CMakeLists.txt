@@ -22,6 +22,7 @@ set(LIB_SOURCES
     src/image.cpp
     src/bsdf_deon.cpp
     src/integrator.cpp
+    src/user_geo.cpp
 )
 
 # Main renderer

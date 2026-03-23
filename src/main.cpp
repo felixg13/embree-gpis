@@ -11,6 +11,7 @@
 
 #include "bsdf_deon.h"
 #include "camera.h"
+#include "user_geo.h"
 #include "hair_loader.h"
 #include "image.h"
 #include "integrator.h"
@@ -120,9 +121,14 @@ int main(int argc, char* argv[])
         all_hair.push_back(m3hair::load_m3hair(a.files[i], offset));
     }
 
-    std::print("Building scene ...\n");
+    std::print("Building scene ({}) ...\n", a.mode);
     m3hair::Scene scene(device);
-    for (const auto& h : all_hair) scene.add_hair(h);
+    for (const auto& h : all_hair) {
+        if (a.mode == "raymarching")
+            scene.add_user_hair(h);
+        else
+            scene.add_hair(h);
+    }
     scene.commit();
 
     // Camera: auto-frame all geometry

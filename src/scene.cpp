@@ -1,4 +1,5 @@
 #include "scene.h"
+#include "user_geo.h"
 #include <stdexcept>
 
 namespace m3hair {
@@ -36,6 +37,11 @@ void Scene::add_hair(const HairData& hair)
     rtcCommitGeometry(geom);
     rtcAttachGeometry(m_scene, geom);
     rtcReleaseGeometry(geom);
+}
+
+void Scene::add_user_hair(const HairData& hair)
+{
+    m3hair::add_user_hair(m_device, m_scene, hair);
 }
 
 void Scene::commit()

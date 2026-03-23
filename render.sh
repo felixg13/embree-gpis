@@ -11,6 +11,7 @@ set -e
 #   curls      — four curls in a row with spacing
 #   hair       — straight hair asset alone, close up
 #   compare    — same curl twice, for BSDF comparison
+#   gpis       — one curl, raymarching mode, 400x300, 4spp
 # ---------------------------------------------------------------------------
 
 SCENE="${1:-dual}"
@@ -69,9 +70,17 @@ case "$SCENE" in
       -o "$OUT" "$@"
     ;;
 
+  gpis)
+    ./build/gpis_hair \
+      assets/curl.m3hair \
+      --spp 16 --width 800 --height 600 \
+      --mode raymarching \
+      -o "$OUT" "$@"
+    ;;
+
   *)
     echo "Unknown scene: $SCENE"
-    echo "Available: instant | test | dual | curls | hair | compare"
+    echo "Available: instant | test | dual | curls | hair | compare | gpis"
     exit 1
     ;;
 esac
