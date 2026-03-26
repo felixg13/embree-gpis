@@ -13,6 +13,7 @@ struct HairData {
 };
 
 // Load a .m3hair file. offset is added to every vertex position.
-HairData load_m3hair(const std::string& path, vec3 offset = {});
+// rotate_y_deg rotates vertices around the Y-axis before applying offset.
+HairData load_m3hair(const std::string& path, vec3 offset = {}, float rotate_y_deg = 0.f);
 
 } // namespace m3hair

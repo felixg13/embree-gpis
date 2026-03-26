@@ -12,7 +12,8 @@ namespace m3hair {
 static void flush_block(HairData& out,
                         std::vector<float4>& block,
                         int& variant,
-                        vec3 offset)
+                        vec3 offset,
+                        float cos_ry, float sin_ry)
 {
     if (block.empty()) return;
 
@@ -30,9 +31,12 @@ static void flush_block(HairData& out,
     const int base = static_cast<int>(out.vertices.size());
 
     for (auto& v : block) {
-        v.x += offset.x;
-        v.y += offset.y;
-        v.z += offset.z;
+        // Y-axis rotation then translate
+        float rx = v.x * cos_ry + v.z * sin_ry;
+        float rz = -v.x * sin_ry + v.z * cos_ry;
+        v.x = rx + offset.x;
+        v.y = v.y + offset.y;
+        v.z = rz + offset.z;
         out.vertices.push_back(v);
     }
 
@@ -50,11 +54,15 @@ static void flush_block(HairData& out,
     block.clear();
 }
 
-HairData load_m3hair(const std::string& path, vec3 offset)
+HairData load_m3hair(const std::string& path, vec3 offset, float rotate_y_deg)
 {
     std::ifstream f(path);
     if (!f)
         throw std::runtime_error("Cannot open: " + path);
+
+    const float rad = rotate_y_deg * (3.14159265f / 180.f);
+    const float cos_ry = std::cos(rad);
+    const float sin_ry = std::sin(rad);
 
     HairData out;
     std::vector<float4> block;
@@ -64,14 +72,14 @@ HairData load_m3hair(const std::string& path, vec3 offset)
     std::string line;
     while (std::getline(f, line)) {
         if (line.empty() || line.find_first_not_of(" \t\r\n") == std::string::npos) {
-            flush_block(out, block, variant, offset);
+            flush_block(out, block, variant, offset, cos_ry, sin_ry);
             continue;
         }
         float4 v{};
         if (std::sscanf(line.c_str(), "%f %f %f %f", &v.x, &v.y, &v.z, &v.w) == 4)
             block.push_back(v);
     }
-    flush_block(out, block, variant, offset);
+    flush_block(out, block, variant, offset, cos_ry, sin_ry);
 
     std::print("  Loaded '{}': {} curves, {} segments, "
                "{} vertices ({:.1f} MB verts + {:.1f} MB idx)\n",

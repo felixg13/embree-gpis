@@ -24,6 +24,7 @@
 // ---------------------------------------------------------------------------
 struct Args {
     std::vector<std::string> files;
+    std::vector<float>       rotations;  // per-file Y-axis rotation in degrees
     int   width   = 1200;
     int   height  =  600;
     int   spp     =   16;
@@ -40,6 +41,7 @@ static void usage(const char* argv0) {
                "  --spp    <int>     samples per pixel (default: 16)\n"
                "  --depth  <int>     max path depth (default: 4)\n"
                "  --spacing <float>  X spacing between assets (default: 2.0)\n"
+               "  --rotate  IDX:DEG  Y-axis rotation for mesh at index IDX (e.g. 1:90)\n"
                "  -o <path>          output PPM (default: renders/out.ppm)\n"
                "  --mode <string>    embree|raymarching (default: embree)\n",
                argv0);
@@ -60,6 +62,17 @@ static Args parse_args(int argc, char* argv[]) {
         else if (s == "--spacing") a.spacing = std::stof(std::string(next()));
         else if (s == "-o")        a.output  = std::string(next());
         else if (s == "--mode")    a.mode    = std::string(next());
+        else if (s == "--rotate") {
+            std::string val = std::string(next());
+            auto colon = val.find(':');
+            if (colon == std::string::npos) {
+                std::print(stderr, "--rotate requires IDX:DEG format\n"); std::exit(1);
+            }
+            int idx = std::stoi(val.substr(0, colon));
+            float deg = std::stof(val.substr(colon + 1));
+            if (idx >= (int)a.rotations.size()) a.rotations.resize(idx + 1, 0.f);
+            a.rotations[idx] = deg;
+        }
         else if (s == "--help" || s == "-h") { usage(argv[0]); std::exit(0); }
         else if (s.starts_with("--")) {
             std::print(stderr, "Unknown option: {}\n", s); std::exit(1);
@@ -117,8 +130,9 @@ int main(int argc, char* argv[])
     std::vector<m3hair::HairData> all_hair;
     all_hair.reserve(a.files.size());
     for (int i = 0; i < (int)a.files.size(); ++i) {
-        vec3 offset = { i * a.spacing, 0.f, 0.f };
-        all_hair.push_back(m3hair::load_m3hair(a.files[i], offset));
+        vec3  offset  = { i * a.spacing, 0.f, 0.f };
+        float rot_deg = i < (int)a.rotations.size() ? a.rotations[i] : 0.f;
+        all_hair.push_back(m3hair::load_m3hair(a.files[i], offset, rot_deg));
     }
 
     std::print("Building scene ({}) ...\n", a.mode);
