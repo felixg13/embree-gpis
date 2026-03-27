@@ -2,6 +2,22 @@
 #include <cmath>
 
 // ---------------------------------------------------------------------------
+// vec2
+// ---------------------------------------------------------------------------
+struct vec2 {
+    float x{}, y{};
+    vec2() = default;
+    vec2(float x, float y) : x(x), y(y) {}
+    vec2 operator+(const vec2& o) const { return {x+o.x, y+o.y}; }
+    vec2 operator-(const vec2& o) const { return {x-o.x, y-o.y}; }
+    vec2 operator*(float t)       const { return {x*t,   y*t};   }
+    vec2 operator-()              const { return {-x, -y};       }
+};
+inline vec2 operator*(float t, const vec2& v) { return v * t; }
+inline float dot(const vec2& a, const vec2& b) { return a.x*b.x + a.y*b.y; }
+inline float length(const vec2& v) { return std::sqrt(dot(v, v)); }
+
+// ---------------------------------------------------------------------------
 // float4 — Embree vertex layout: x, y, z, radius
 // ---------------------------------------------------------------------------
 struct float4 {

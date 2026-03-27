@@ -34,7 +34,15 @@ case "$SCENE" in
   test)
     ./build/gpis_hair \
       assets/curl.m3hair \
-      --spp 8 --width 600 --height 400 \
+      --spp 8 --width 400 --height 400 \
+      -o "$OUT" "$@"
+    ;;
+
+  test_gpis)
+    ./build/gpis_hair \
+      assets/curl.m3hair \
+      --spp 8 --width 400 --height 400 \
+      --mode raymarching \
       -o "$OUT" "$@"
     ;;
 

@@ -23,6 +23,7 @@ set(LIB_SOURCES
     src/bsdf_deon.cpp
     src/integrator.cpp
     src/user_geo.cpp
+    src/gpis_nee.cpp
 )
 
 # Main renderer

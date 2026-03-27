@@ -1,5 +1,6 @@
 #pragma once
 #include "math.h"
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,8 @@ struct HairData {
     std::vector<int>    indices;    // first CP index of each B-spline segment
     int                 num_curves   = 0;
     int                 num_segments = 0;
+    float               amplitude    = 0.f;         // noise amplitude (replaces SC_AMPLITUDE)
+    uint32_t            seed         = 0xdeadbeef;  // global noise seed (replaces SC_GLOBAL_SEED)
 };
 
 // Load a .m3hair file. offset is added to every vertex position.

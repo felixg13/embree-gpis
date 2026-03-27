@@ -9,8 +9,8 @@
 //
 //   • x_k: impulse positions, uniformly distributed in each grid cell
 //   • w_k: ±1 Bernoulli weights
-//   • φ: Gaussian kernel exp(−‖x−x_k‖²/(2l²)), l = hair radius
-//   • Var = (N/cell³) · (πl²)^(3/2)  (analytic variance for Gaussians)
+//   • φ: Gaussian kernel exp(−‖x−x_k‖²/(2l²)), l = cell_size/3
+//   • Var = N · π^(3/2) · l³ / l³  (analytic for Gaussian kernel, see below)
 //
 // The gradient ∇f is computed analytically:
 //   ∇f(x) = ∇μ(x) + A · ∇scnoise(x)
@@ -21,6 +21,7 @@
 // noise field regardless of which primitive or ray evaluates it.
 
 #include "user_geo.h"
+#include "gpis_nee.h"
 #include "math.h"
 
 #include <algorithm>
@@ -91,10 +92,34 @@ static float mean_field(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float r, vec3 x,
 }
 
 // ---------------------------------------------------------------------------
-// Sparse Convolution Noise (Xu et al. 2025 / Lagae et al. 2011)
+// Sparse Convolution Noise — Gaussian (squared-exponential) kernel
+// Kernel: h(r) = exp(−r²/(2l²)),  l = cs/3
+// Truncated to zero for r > cs (cell support radius).
+// Variance (3D, infinite-integral approximation, truncation error ~1%):
+//   Var = (N/cs³) · π^(3/2) · l³  = N · π^(3/2) / 27
 // ---------------------------------------------------------------------------
 
-static constexpr int SC_IMPULSES = 2;  // impulses per cell
+static constexpr int SC_IMPULSES = 10;  // impulses per cell
+
+// sqrt(π) ≈ 1.7724538509
+static constexpr float SC_KERNEL_VAR =
+    (float)SC_IMPULSES * 3.14159265f * 1.7724538509f / 27.f;
+
+// Truncated Gaussian kernel: h(d²) = exp(−d²·inv_l2/2), inv_l2 = 1/l² = 9/cs²
+// Returns 0 implicitly — caller must check d2 < cs2 before calling.
+inline float sc_kernel(float d2, float inv_l2)
+{
+    return expf(-d2 * inv_l2 * 0.5f);
+}
+
+// κ(r²) = exp(−r²/(4l²))  — stationary covariance normalized to κ(0)=1
+inline float kappa(float r2, float l2) {
+    return expf(-r2 / (4.f * l2));
+}
+// κ''(0) = −1/(2l²)
+inline float kappa_dd0(float l2) {
+    return -1.f / (2.f * l2);
+}
 
 // Deterministic hash for cell (ix, iy, iz) and global seed
 static uint32_t cell_hash(int32_t ix, int32_t iy, int32_t iz, uint32_t seed)
@@ -114,28 +139,12 @@ static float lcg_next(uint32_t& s)
     return (s >> 8) * (1.f / (1u << 24));
 }
 
-// Polynomial bump kernel k(d²) = max(0, 1 − d²/cs²)³
-// No transcendentals — fast and differentiable everywhere.
-// ∂k/∂p_j = −6 d_j / cs² × max(0, 1 − d²/cs²)²
-//
-// Variance of sparse conv noise with this kernel (3D):
-//   ∫ k²(|r|) 4π r² dr = 4π cs³ ∫₀¹ (1−t²)^6 t² dt  (t = |r|/cs)
-//   ∫₀¹ (1−t²)^6 t² dt ≈ 0.02273  (numerically exact)
-//   Var = (N/cs³) × 4π cs³ × 0.02273 = N × 4π × 0.02273 ≈ N × 0.2855
-static constexpr float SC_KERNEL_VAR = (float)SC_IMPULSES * 4.f * 3.14159265f * 0.02273f;
-
-inline float sc_kernel(float d2, float inv_cs2)
-{
-    float t = 1.f - d2 * inv_cs2;
-    return (t > 0.f) ? t*t*t : 0.f;
-}
-
 // Evaluate sparse convolution noise — value only (fast path, used during marching)
 static float scnoise_val(vec3 p, float cell_size, uint32_t seed)
 {
-    const float inv_cs  = 1.f / cell_size;
-    const float inv_cs2 = inv_cs * inv_cs;
-    const float cs2     = cell_size * cell_size;
+    const float inv_cs   = 1.f / cell_size;
+    const float cs2      = cell_size * cell_size;
+    const float inv_l2   = 9.f * inv_cs * inv_cs;   // 1/l², l = cs/3
     const float inv_norm = 1.f / sqrtf(SC_KERNEL_VAR);
 
     const int gx = (int)floorf(p.x * inv_cs);
@@ -159,7 +168,7 @@ static float scnoise_val(vec3 p, float cell_size, uint32_t seed)
             const float rx = p.x - xi, ry = p.y - yi, rz = p.z - zi;
             const float d2 = rx*rx + ry*ry + rz*rz;
             if (d2 >= cs2) continue;
-            vsum += wi * sc_kernel(d2, inv_cs2);
+            vsum += wi * sc_kernel(d2, inv_l2);
         }
     }
     return vsum * inv_norm;
@@ -169,9 +178,9 @@ static float scnoise_val(vec3 p, float cell_size, uint32_t seed)
 static void scnoise_val_grad(vec3 p, float cell_size, uint32_t seed,
                              float& out_val, vec3& out_grad)
 {
-    const float inv_cs  = 1.f / cell_size;
-    const float inv_cs2 = inv_cs * inv_cs;
-    const float cs2     = cell_size * cell_size;
+    const float inv_cs   = 1.f / cell_size;
+    const float cs2      = cell_size * cell_size;
+    const float inv_l2   = 9.f * inv_cs * inv_cs;   // 1/l², l = cs/3
     const float inv_norm = 1.f / sqrtf(SC_KERNEL_VAR);
 
     const int gx = (int)floorf(p.x * inv_cs);
@@ -197,10 +206,9 @@ static void scnoise_val_grad(vec3 p, float cell_size, uint32_t seed,
             const float d2 = rx*rx + ry*ry + rz*rz;
             if (d2 >= cs2) continue;
 
-            float t  = 1.f - d2 * inv_cs2;
-            float kv = t*t*t;
-            float dkc = -6.f * t*t * inv_cs2;  // ∂k/∂(d_j) = dkc * d_j
-            vsum += wi * kv;
+            float kv  = sc_kernel(d2, inv_l2);
+            float dkc = -inv_l2 * kv;   // ∂h/∂r_j = -(r_j/l²)·h → factor per-component
+            vsum   += wi * kv;
             gsum.x += wi * dkc * rx;
             gsum.y += wi * dkc * ry;
             gsum.z += wi * dkc * rz;
@@ -230,19 +238,15 @@ static bool ray_aabb(float ox, float oy, float oz,
     return t0 <= t1;
 }
 
-// Amplitude of the noise relative to the radius
-static constexpr float SC_AMPLITUDE   = 0.0f;  // TEST: zero noise
-// Fixed global noise seed (single realization)
-static constexpr uint32_t SC_GLOBAL_SEED = 0xdeadbeef;
-
 // ---------------------------------------------------------------------------
 // AABB for one segment.
 // Expanded by the noise amplitude so the ray always starts outside the
 // noisy surface, guaranteeing f(t0) < 0 at AABB entry.
 // ---------------------------------------------------------------------------
-static RTCBounds segment_aabb(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float r) {
+static RTCBounds segment_aabb(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float r,
+                              float amplitude) {
     // Expand by r + noise headroom so f < 0 at AABB boundary
-    const float rr = r * (1.f + 3.f * SC_AMPLITUDE);
+    const float rr = r * (1.f + 3.f * amplitude);
     RTCBounds b;
     b.lower_x = std::min({p0.x,p1.x,p2.x,p3.x}) - rr;
     b.lower_y = std::min({p0.y,p1.y,p2.y,p3.y}) - rr;
@@ -254,12 +258,21 @@ static RTCBounds segment_aabb(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float r) {
 }
 
 // ---------------------------------------------------------------------------
+// Conditioning state — set by renderer before each rtcIntersect / rtcOccluded
+// ---------------------------------------------------------------------------
+thread_local CondState tl_cond = {{0.f,0.f,0.f}, 0.f, false};
+
+// ---------------------------------------------------------------------------
 // Shared march state for intersect and occluded
 // ---------------------------------------------------------------------------
 struct MarchResult {
     float t_hit;
-    float ct;      // B-spline parameter at hit
-    vec3  normal;
+    float ct;           // B-spline parameter (→ RTCHit.u, unchanged)
+    vec3  normal;       // normalized ∇f at hit
+    float u_val;        // pathwise value weight   (→ RTCHit.v)
+    vec3  u_grad;       // pathwise gradient weights (→ tl_cond)
+    float gz;           // ∂ψ/∂z at hit (for NEE)
+    float noise_val;    // ψ(x_s) raw
     bool  hit;
 };
 
@@ -270,7 +283,9 @@ static MarchResult march_segment(
     vec3 p0, vec3 p1, vec3 p2, vec3 p3,
     float r,
     const RTCBounds& aabb,
-    float tnn)
+    float tnn,
+    float amplitude,      // = hair->amplitude * r  (world-space amplitude)
+    uint32_t seed)
 {
     MarchResult result{};
     result.hit = false;
@@ -282,19 +297,42 @@ static MarchResult march_segment(
     float t0, t1;
     if (!ray_aabb(ox,oy,oz, idx,idy,idz, tnn,tff, aabb, t0,t1)) return result;
 
-    const float cell_size = r;            // noise grid cell size = hair radius
-    const float amplitude = SC_AMPLITUDE * r;
+    const float cell_size = r;           // noise grid cell size = hair radius
+    const float l2        = cell_size * cell_size / 9.f;   // l = cs/3
 
-    // 8 uniform steps across the AABB segment
+    // Lipschitz-bounded step size (STEP 3)
+    // L_ψ = sqrt(N_overlap) * (1/l) * exp(-0.5) / sqrt(Var)
+    // N_overlap = SC_IMPULSES * 27 (worst-case overlapping cells)
+    const float inv_norm       = 1.f / sqrtf(SC_KERNEL_VAR);
+    const float inv_l          = 3.f / cell_size;
+    const float N_overlap_f    = (float)(SC_IMPULSES * 27);
+    const float L_psi          = sqrtf(N_overlap_f) * inv_l * expf(-0.5f) * inv_norm;
+    const float L_f            = 1.f + amplitude * L_psi;
+    const float step_safe      = 1.f / L_f;
+
     const float span   = t1 - t0;
-    const int   nsteps = 8;
-    const float step   = span / (float)nsteps;
+    float step         = std::min(span / 4.f, step_safe);
+    int   nsteps       = (int)ceilf(span / step) + 1;
+    nsteps             = std::min(nsteps, 256);
 
-    // Value-only evaluation for marching (no gradient allocated)
+    // Value-only evaluation for marching — includes conditioning correction
     auto eval_f = [&](float t) -> float {
         vec3  x  = { ox+dx*t, oy+dy*t, oz+dz*t };
         float mu = mean_field_val(p0, p1, p2, p3, r, x);
-        return mu + amplitude * scnoise_val(x, cell_size, SC_GLOBAL_SEED);
+        float f  = mu + amplitude * scnoise_val(x, cell_size, seed);
+
+        if (tl_cond.valid) {
+            // x0 = ray origin = (ox, oy, oz) = previous bounce hit point
+            vec3  delta = { x.x - ox, x.y - oy, x.z - oz };
+            float r2    = dot(delta, delta);
+            float kv    = kappa(r2, l2);
+            // ∇₂κ(x, x0) = −(x−x0)/(2l²) · κ(x, x0)  (gradient wrt x0)
+            // dot(∇₂κ, u_grad) = −(1/(2l²)) · kv · dot(delta, u_grad)
+            float grad_splat = (-1.f / (2.f * l2)) * kv * dot(delta, tl_cond.u_grad);
+            f += kv * tl_cond.u_val + grad_splat;
+        }
+
+        return f;
     };
 
     float f_prev = eval_f(t0);
@@ -324,7 +362,7 @@ static MarchResult march_segment(
             mean_field(p0, p1, p2, p3, r, x_hit, grad_mu);
             float noise_val;
             vec3  noise_grad;
-            scnoise_val_grad(x_hit, cell_size, SC_GLOBAL_SEED, noise_val, noise_grad);
+            scnoise_val_grad(x_hit, cell_size, seed, noise_val, noise_grad);
 
             vec3 ng = grad_mu + noise_grad * amplitude;
             float ng_len = sqrtf(dot(ng, ng));
@@ -334,10 +372,21 @@ static MarchResult march_segment(
             // Curve parameter for tangent reconstruction
             float ct = closest_t(p0, p1, p2, p3, x_hit);
 
-            result.hit    = true;
-            result.t_hit  = t_hit;
-            result.ct     = ct;
-            result.normal = ng;
+            // Pathwise conditioning weights (STEP 5.3)
+            float u_val = -noise_val;
+            vec3  u_grad = noise_grad * (-2.f * l2);
+
+            // Directional noise derivative along ray direction (for NEE)
+            float gz = dot(noise_grad, {dx, dy, dz});
+
+            result.hit        = true;
+            result.t_hit      = t_hit;
+            result.ct         = ct;
+            result.normal     = ng;
+            result.u_val      = u_val;
+            result.u_grad     = u_grad;
+            result.gz         = gz;
+            result.noise_val  = noise_val;
             return result;
         }
 
@@ -360,7 +409,7 @@ static void bounds_cb(const RTCBoundsFunctionArguments* args) {
     vec3 p1 = from_f4(hair->vertices[base+1]);
     vec3 p2 = from_f4(hair->vertices[base+2]);
     vec3 p3 = from_f4(hair->vertices[base+3]);
-    *args->bounds_o = segment_aabb(p0, p1, p2, p3, r);
+    *args->bounds_o = segment_aabb(p0, p1, p2, p3, r, hair->amplitude);
 }
 
 static void intersect_cb(const RTCIntersectFunctionNArguments* args) {
@@ -380,7 +429,8 @@ static void intersect_cb(const RTCIntersectFunctionNArguments* args) {
     vec3 p2 = from_f4(hair->vertices[base+2]);
     vec3 p3 = from_f4(hair->vertices[base+3]);
 
-    RTCBounds aabb = segment_aabb(p0, p1, p2, p3, r);
+    RTCBounds aabb = segment_aabb(p0, p1, p2, p3, r, hair->amplitude);
+    const float amplitude = hair->amplitude * r;
 
     for (unsigned int i = 0; i < N; ++i) {
         if (!args->valid[i]) continue;
@@ -388,24 +438,26 @@ static void intersect_cb(const RTCIntersectFunctionNArguments* args) {
         float ox  = RTCRayN_org_x(rayN, N, i);
         float oy  = RTCRayN_org_y(rayN, N, i);
         float oz  = RTCRayN_org_z(rayN, N, i);
-        float dx  = RTCRayN_dir_x(rayN, N, i);
-        float dy  = RTCRayN_dir_y(rayN, N, i);
-        float dz  = RTCRayN_dir_z(rayN, N, i);
+        float ddx = RTCRayN_dir_x(rayN, N, i);
+        float ddy = RTCRayN_dir_y(rayN, N, i);
+        float ddz = RTCRayN_dir_z(rayN, N, i);
         float tnn = RTCRayN_tnear(rayN, N, i);
         float tff = RTCRayN_tfar (rayN, N, i);
 
-        MarchResult res = march_segment(ox,oy,oz, dx,dy,dz, tff,
-                                        p0,p1,p2,p3, r, aabb, tnn);
+        MarchResult res = march_segment(ox,oy,oz, ddx,ddy,ddz, tff,
+                                        p0,p1,p2,p3, r, aabb, tnn,
+                                        amplitude, hair->seed);
         if (!res.hit) continue;
 
-        RTCRayN_tfar(rayN, N, i) = res.t_hit;
-        RTCHitN_Ng_x(hitN, N, i) = res.normal.x;
-        RTCHitN_Ng_y(hitN, N, i) = res.normal.y;
-        RTCHitN_Ng_z(hitN, N, i) = res.normal.z;
-        RTCHitN_u(hitN, N, i)    = res.ct;
-        RTCHitN_v(hitN, N, i)    = 0.f;
-        RTCHitN_primID(hitN, N, i) = prim;
-        RTCHitN_geomID(hitN, N, i) = geom;
+        RTCRayN_tfar(rayN, N, i)     = res.t_hit;
+        RTCHitN_Ng_x(hitN, N, i)     = res.normal.x;
+        RTCHitN_Ng_y(hitN, N, i)     = res.normal.y;
+        RTCHitN_Ng_z(hitN, N, i)     = res.normal.z;
+        RTCHitN_u(hitN, N, i)        = res.ct;       // B-spline parameter (unchanged)
+        RTCHitN_v(hitN, N, i)        = res.u_val;    // pathwise value weight
+        RTCHitN_primID(hitN, N, i)   = prim;
+        RTCHitN_geomID(hitN, N, i)   = geom;
+        tl_cond = { res.u_grad, res.u_val, true };   // gradient weights for next bounce
     }
 }
 
@@ -426,7 +478,8 @@ static void occluded_cb(const RTCOccludedFunctionNArguments* args) {
     vec3 p2 = from_f4(hair->vertices[base+2]);
     vec3 p3 = from_f4(hair->vertices[base+3]);
 
-    RTCBounds aabb = segment_aabb(p0, p1, p2, p3, r);
+    RTCBounds aabb = segment_aabb(p0, p1, p2, p3, r, hair->amplitude);
+    const float amplitude = hair->amplitude * r;
 
     for (unsigned int i = 0; i < N; ++i) {
         if (!args->valid[i]) continue;
@@ -434,14 +487,15 @@ static void occluded_cb(const RTCOccludedFunctionNArguments* args) {
         float ox  = RTCRayN_org_x(rayN, N, i);
         float oy  = RTCRayN_org_y(rayN, N, i);
         float oz  = RTCRayN_org_z(rayN, N, i);
-        float dx  = RTCRayN_dir_x(rayN, N, i);
-        float dy  = RTCRayN_dir_y(rayN, N, i);
-        float dz  = RTCRayN_dir_z(rayN, N, i);
+        float ddx = RTCRayN_dir_x(rayN, N, i);
+        float ddy = RTCRayN_dir_y(rayN, N, i);
+        float ddz = RTCRayN_dir_z(rayN, N, i);
         float tnn = RTCRayN_tnear(rayN, N, i);
         float tff = RTCRayN_tfar (rayN, N, i);
 
-        MarchResult res = march_segment(ox,oy,oz, dx,dy,dz, tff,
-                                        p0,p1,p2,p3, r, aabb, tnn);
+        MarchResult res = march_segment(ox,oy,oz, ddx,ddy,ddz, tff,
+                                        p0,p1,p2,p3, r, aabb, tnn,
+                                        amplitude, hair->seed);
         if (res.hit) {
             // Signal occlusion: Embree checks tfar < 0
             // Use bit-cast to avoid UB under -ffast-math
@@ -450,6 +504,42 @@ static void occluded_cb(const RTCOccludedFunctionNArguments* args) {
             RTCRayN_tfar(rayN, N, i) = neg_inf;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+
+GpisHitInfo extract_hit_info(const RTCRayHit& rh, const HairData& hair)
+{
+    const float r         = hair.vertices[0].w;   // approximate — caller can refine
+    const float cell_size = r;
+    const float l2        = cell_size * cell_size / 9.f;
+
+    vec3 p = {
+        rh.ray.org_x + rh.ray.dir_x * rh.ray.tfar,
+        rh.ray.org_y + rh.ray.dir_y * rh.ray.tfar,
+        rh.ray.org_z + rh.ray.dir_z * rh.ray.tfar
+    };
+
+    // Recover noise gradient from hit normal and μ gradient
+    // ng_normalized = normalize(grad_mu + amplitude * noise_grad)
+    // We store Ng un-normalized (just the direction); compute grad_mu at p.
+    // For NEE, caller needs the raw noise gradient — reconstruct via:
+    //   noise_grad ≈ (ng - grad_mu) / amplitude  (if amplitude > 0)
+    // Use the pre-computed gz (∂ψ/∂z) stored via tl_cond or caller-computed.
+
+    GpisHitInfo info;
+    info.p    = p;
+    info.l2   = l2;
+    info.kdd0 = kappa_dd0(l2);
+    info.gz   = 0.f;   // caller should fill from saved MarchResult.gz
+
+    // ∇μ at hit point
+    float ct = rh.hit.u;   // B-spline parameter
+    (void)ct;
+    // Ng is the un-normalized surface normal stored in the hit record
+    info.grad_mu = normalize({ rh.hit.Ng_x, rh.hit.Ng_y, rh.hit.Ng_z });
+
+    return info;
 }
 
 // ---------------------------------------------------------------------------
