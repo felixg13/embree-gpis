@@ -9,7 +9,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    add_compile_options(-O3 -march=native -Wall -Wextra -ffast-math)
+    if(CMAKE_BUILD_TYPE STREQUAL "Profile")
+        add_compile_options(-O2 -g -fno-omit-frame-pointer -march=native -Wall -Wextra)
+    else()
+        add_compile_options(-O3 -march=native -Wall -Wextra -ffast-math -fno-omit-frame-pointer)
+    endif()
 endif()
 
 find_package(embree 4 REQUIRED)
