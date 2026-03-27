@@ -2,8 +2,8 @@
 
 #include <cstdio>
 #include <fstream>
-#include <print>
 #include <stdexcept>
+#include <spdlog/spdlog.h>
 #include <string>
 #include <vector>
 
@@ -81,8 +81,7 @@ HairData load_m3hair(const std::string& path, vec3 offset, float rotate_y_deg)
     }
     flush_block(out, block, variant, offset, cos_ry, sin_ry);
 
-    std::print("  Loaded '{}': {} curves, {} segments, "
-               "{} vertices ({:.1f} MB verts + {:.1f} MB idx)\n",
+    spdlog::info("  Loaded '{}': {} curves, {} segments, {} vertices ({:.1f} MB verts + {:.1f} MB idx)",
                path,
                out.num_curves, out.num_segments,
                out.vertices.size(),

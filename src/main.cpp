@@ -1,5 +1,6 @@
 #include <embree4/rtcore.h>
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <print>
@@ -8,6 +9,7 @@
 #include <vector>
 #include <tbb/blocked_range2d.h>
 #include <tbb/parallel_for.h>
+#include <spdlog/spdlog.h>
 
 #include "bsdf_deon.h"
 #include "camera.h"
@@ -52,7 +54,7 @@ static Args parse_args(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i) {
         std::string_view s = argv[i];
         auto next = [&]() -> std::string_view {
-            if (i+1 >= argc) { std::print(stderr, "Missing value for {}\n", s); std::exit(1); }
+            if (i+1 >= argc) { spdlog::error("Missing value for {}", s); std::exit(1); }
             return argv[++i];
         };
         if      (s == "--width")   a.width   = std::stoi(std::string(next()));
@@ -66,7 +68,7 @@ static Args parse_args(int argc, char* argv[]) {
             std::string val = std::string(next());
             auto colon = val.find(':');
             if (colon == std::string::npos) {
-                std::print(stderr, "--rotate requires IDX:DEG format\n"); std::exit(1);
+                spdlog::error("--rotate requires IDX:DEG format"); std::exit(1);
             }
             int idx = std::stoi(val.substr(0, colon));
             float deg = std::stof(val.substr(colon + 1));
@@ -75,7 +77,7 @@ static Args parse_args(int argc, char* argv[]) {
         }
         else if (s == "--help" || s == "-h") { usage(argv[0]); std::exit(0); }
         else if (s.starts_with("--")) {
-            std::print(stderr, "Unknown option: {}\n", s); std::exit(1);
+            spdlog::error("Unknown option: {}", s); std::exit(1);
         } else {
             a.files.push_back(std::string(s));
         }
@@ -120,13 +122,15 @@ static m3hair::Camera auto_camera(const std::vector<m3hair::HairData>& all_hair,
 // ---------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
+    spdlog::set_pattern("[%T.%e] [%^%l%$] %v");
+
     Args a = parse_args(argc, argv);
 
     RTCDevice device = rtcNewDevice(nullptr);
-    if (!device) { std::print(stderr, "Embree device failed\n"); return 1; }
+    if (!device) { spdlog::error("Embree device failed"); return 1; }
 
     // Load each file with X offset i*spacing
-    std::print("Loading {} asset(s) ...\n", a.files.size());
+    spdlog::info("Loading {} asset(s)", a.files.size());
     std::vector<m3hair::HairData> all_hair;
     all_hair.reserve(a.files.size());
     for (int i = 0; i < (int)a.files.size(); ++i) {
@@ -135,7 +139,7 @@ int main(int argc, char* argv[])
         all_hair.push_back(m3hair::load_m3hair(a.files[i], offset, rot_deg));
     }
 
-    std::print("Building scene ({}) ...\n", a.mode);
+    spdlog::info("Building scene (mode={})", a.mode);
     m3hair::Scene scene(device);
     for (const auto& h : all_hair) {
         if (a.mode == "raymarching")
@@ -144,6 +148,7 @@ int main(int argc, char* argv[])
             scene.add_hair(h);
     }
     scene.commit();
+    spdlog::info("Scene committed");
 
     // Camera: auto-frame all geometry
     m3hair::Camera cam = auto_camera(all_hair, a.width, a.height);
@@ -161,8 +166,10 @@ int main(int argc, char* argv[])
 
     const int total_tiles = ((a.width+15)/16) * ((a.height+15)/16);
     std::atomic<int> done_tiles{0};
-    std::print("Rendering {}x{} @ {}spp  mode={} ...\n",
-               a.width, a.height, a.spp, a.mode);
+    spdlog::info("Rendering {}x{} @ {} spp  mode={}  ({} tiles)",
+                 a.width, a.height, a.spp, a.mode, total_tiles);
+
+    auto t_start = std::chrono::steady_clock::now();
 
     tbb::parallel_for(
         tbb::blocked_range2d<int>(0, a.height, 16, 0, a.width, 16),
@@ -181,19 +188,26 @@ int main(int argc, char* argv[])
                 }
             }
             int t = ++done_tiles;
-            if (t % std::max(1, total_tiles/100) == 0) {
-                float pct = std::min(100.f, 100.f*t/total_tiles);
-                std::print(stderr, "\r  {:.0f}%   ", pct);
+            // Log at each 10% milestone — fires exactly once per crossing
+            int new_pct = (int)(100.f * t / total_tiles);
+            int old_pct = (int)(100.f * (t - 1) / total_tiles);
+            if ((new_pct / 10) > (old_pct / 10)) {
+                float elapsed = std::chrono::duration<float>(
+                    std::chrono::steady_clock::now() - t_start).count();
+                spdlog::info("  {:3d}%  ({:.1f}s elapsed)", (new_pct / 10) * 10, elapsed);
             }
         });
-    std::print(stderr, "\r  100%   \n");
+
+    float total_s = std::chrono::duration<float>(
+        std::chrono::steady_clock::now() - t_start).count();
+    spdlog::info("Render complete in {:.2f}s", total_s);
 
     std::filesystem::create_directories(
         std::filesystem::path(a.output).parent_path().empty()
             ? std::filesystem::path(".")
             : std::filesystem::path(a.output).parent_path());
     m3hair::write_ppm(a.output, img);
-    std::print("Wrote {}\n", a.output);
+    spdlog::info("Wrote {}", a.output);
 
     rtcReleaseDevice(device);
     return 0;

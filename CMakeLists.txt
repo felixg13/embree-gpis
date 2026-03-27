@@ -15,6 +15,20 @@ endif()
 find_package(embree 4 REQUIRED)
 find_package(TBB REQUIRED)
 
+include(FetchContent)
+FetchContent_Declare(
+  spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog.git
+  GIT_TAG v1.16.0
+  GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(spdlog)
+
+# spdlog's bundled fmt uses isfinite/isnan which triggers -Wnan-infinity-disabled
+# under -ffast-math.  Mark its headers as system includes to suppress the noise.
+get_target_property(_spdlog_incs spdlog_header_only INTERFACE_INCLUDE_DIRECTORIES)
+set_target_properties(spdlog_header_only PROPERTIES
+    INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_spdlog_incs}")
+
 # Shared library sources (no main)
 set(LIB_SOURCES
     src/hair_loader.cpp
@@ -29,9 +43,9 @@ set(LIB_SOURCES
 # Main renderer
 add_executable(gpis_hair src/main.cpp ${LIB_SOURCES})
 target_include_directories(gpis_hair PRIVATE src)
-target_link_libraries(gpis_hair PRIVATE embree4 TBB::tbb)
+target_link_libraries(gpis_hair PRIVATE embree4 TBB::tbb spdlog::spdlog_header_only)
 
 # BSDF unit tests
 add_executable(bsdf_test src/bsdf_test.cpp ${LIB_SOURCES})
 target_include_directories(bsdf_test PRIVATE src)
-target_link_libraries(bsdf_test PRIVATE embree4 TBB::tbb)
+target_link_libraries(bsdf_test PRIVATE embree4 TBB::tbb spdlog::spdlog_header_only)

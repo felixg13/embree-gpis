@@ -1,15 +1,15 @@
 #include "image.h"
 #include <cmath>
 #include <fstream>
-#include <print>
 #include <stdexcept>
+#include <spdlog/spdlog.h>
 namespace m3hair {
 
 static float reinhard(float x) { return x / (1.f + x); }
 static float gamma22(float x) { return std::pow(x, 1.f / 2.2f); }
 
 void write_ppm(const std::string &path, const Image &img) {
-  std::print("writing ppm");
+  spdlog::info("Writing PPM: {}", path);
   std::ofstream f(path, std::ios::binary);
   if (!f)
     throw std::runtime_error("Cannot write: " + path);

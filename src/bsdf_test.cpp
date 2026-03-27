@@ -2,7 +2,7 @@
 #include "bsdf_deon.h"
 #include <cmath>
 #include <cstdio>
-#include <print>
+#include <spdlog/spdlog.h>
 
 using namespace m3hair;
 
@@ -53,7 +53,7 @@ static bool test_white_furnace() {
             }
             for (int c = 0; c < 3; ++c) {
                 if (integral[c] > 1.02f) {
-                    std::print("  FAIL white_furnace ch={} theta_i={:.2f} phi_i={:.2f}: integral={:.4f}\n",
+                    spdlog::error("  FAIL white_furnace ch={} theta_i={:.2f} phi_i={:.2f}: integral={:.4f}",
                                c, theta_i, phi_i, integral[c]);
                     passed = false;
                 }
@@ -84,7 +84,7 @@ static bool test_reciprocity() {
                               fabsf(f_ab.y-f_ba.y),
                               fabsf(f_ab.z-f_ba.z)});
         if (err > 1e-3f) {
-            std::print("  FAIL reciprocity err={:.5f}  ti={:.2f} pi={:.2f} to={:.2f} po={:.2f}\n",
+            spdlog::error("  FAIL reciprocity err={:.5f}  ti={:.2f} pi={:.2f} to={:.2f} po={:.2f}",
                        err, ti, pi_, to, po);
             passed = false;
         }
@@ -116,25 +116,27 @@ static bool test_R_lobe_specular() {
 
     bool ok = (f_spec.x > f_off.x) && (f_spec.y > f_off.y) && (f_spec.z > f_off.z);
     if (!ok)
-        std::print("  FAIL R_lobe: f_spec=({:.4f},{:.4f},{:.4f}) f_off=({:.4f},{:.4f},{:.4f})\n",
+        spdlog::error("  FAIL R_lobe: f_spec=({:.4f},{:.4f},{:.4f}) f_off=({:.4f},{:.4f},{:.4f})",
                    f_spec.x, f_spec.y, f_spec.z, f_off.x, f_off.y, f_off.z);
     return ok;
 }
 
 // -----------------------------------------------------------------------
 int main() {
-    std::print("=== d'Eon BSDF unit tests ===\n");
+    spdlog::set_pattern("[%T.%e] [%^%l%$] %v");
+    spdlog::info("=== d'Eon BSDF unit tests ===");
 
     bool ok1 = test_white_furnace();
-    std::print("[{}] white_furnace\n", ok1 ? "PASS" : "FAIL");
+    spdlog::log(ok1 ? spdlog::level::info : spdlog::level::err, "[{}] white_furnace",    ok1 ? "PASS" : "FAIL");
 
     bool ok2 = test_reciprocity();
-    std::print("[{}] reciprocity\n",   ok2 ? "PASS" : "FAIL");
+    spdlog::log(ok2 ? spdlog::level::info : spdlog::level::err, "[{}] reciprocity",      ok2 ? "PASS" : "FAIL");
 
     bool ok3 = test_R_lobe_specular();
-    std::print("[{}] R_lobe_specular\n", ok3 ? "PASS" : "FAIL");
+    spdlog::log(ok3 ? spdlog::level::info : spdlog::level::err, "[{}] R_lobe_specular",  ok3 ? "PASS" : "FAIL");
 
     bool all = ok1 && ok2 && ok3;
-    std::print("\n{}\n", all ? "All tests PASSED." : "Some tests FAILED.");
+    spdlog::log(all ? spdlog::level::info : spdlog::level::err,
+                all ? "All tests PASSED." : "Some tests FAILED.");
     return all ? 0 : 1;
 }
