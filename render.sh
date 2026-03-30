@@ -83,7 +83,7 @@ case "$SCENE" in
     ./build/gpis_hair \
       assets/hair.m3hair \
       --rotate 0:90 \
-      --spp 16 --width 400 --height 400 \
+      --spp 16 --width 1000 --height 1000 \
       -o "$OUT" "$@"
     ;;
 
@@ -91,7 +91,15 @@ case "$SCENE" in
     ./build/gpis_hair \
       assets/hair.m3hair \
       --rotate 0:90 \
-      --spp 16 --width 400 --height 400 \
+      --spp 16 --width 1000 --height 1000 \
+      --mode raymarching \
+      -o "$OUT" "$@"
+    ;;
+
+ curl_gpis)
+    ./build/gpis_hair \
+      assets/curl.m3hair \
+      --spp 16 --width 1000 --height 1000 \
       --mode raymarching \
       -o "$OUT" "$@"
     ;;
