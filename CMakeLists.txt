@@ -7,10 +7,12 @@ project(gpis_hair
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if(CMAKE_BUILD_TYPE STREQUAL "Profile")
         add_compile_options(-O2 -g -fno-omit-frame-pointer -march=native -Wall -Wextra)
+        add_compile_definitions(ENABLE_PERF_COUNTERS)
     else()
         add_compile_options(-O3 -march=native -Wall -Wextra -ffast-math -fno-omit-frame-pointer)
     endif()

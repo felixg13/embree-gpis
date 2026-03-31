@@ -1,0 +1,31 @@
+CompileFlags:
+  CompilationDatabase: build/
+  Add:
+    - -std=c++23
+    - -Wall
+    - -Wextra
+    - -Wno-unused-parameter
+
+Diagnostics:
+  ClangTidy:
+    Add:
+      - bugprone-*
+      - modernize-*
+      - performance-*
+      - readability-*
+    Remove:
+      - modernize-use-trailing-return-type
+      - readability-magic-numbers
+      - readability-implicit-bool-conversion
+      - readability-function-cognitive-complexity
+      - bugprone-easily-swappable-parameters
+      - bugprone-narrowing-conversions
+
+Index:
+  Background: true
+  StandardLibrary: system
+
+InlayHints:
+  Enabled: true
+  ParameterNames: true
+  DeducedTypes: true
