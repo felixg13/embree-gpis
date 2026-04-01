@@ -7,11 +7,11 @@ namespace m3hair {
 // Hit information needed for GPIS next-event estimation (§6, Xu et al. 2025)
 // ---------------------------------------------------------------------------
 struct GpisHitInfo {
-    vec3    p;          // hit point x_s
-    vec3    grad_mu;    // ∇μ(x_s)  — mean-field gradient
-    float   gz;         // directional noise derivative ∂ψ/∂z at x_s (ray dir z)
-    float   l2;         // l² = (cell_size/3)²
-    float   kdd0;       // κ''(0) = −1/(2l²)
+    vec3 p;       // hit point x_s
+    vec3 grad_mu; // ∇μ(x_s)  — mean-field gradient
+    float gz;     // directional noise derivative ∂ψ/∂z at x_s (ray dir z)
+    float l2;     // l² = (cell_size/3)²
+    float kdd0;   // κ''(0) = −1/(2l²)
 };
 
 // ---------------------------------------------------------------------------
@@ -55,14 +55,13 @@ float mis_weight(float p_a, float p_b);
 //
 // Returns the MIS-weighted radiance contribution (multiply by visibility).
 // ---------------------------------------------------------------------------
-vec3 eval_nee_contribution(
-    const GpisHitInfo& hit,
-    vec3  omega_o,
-    vec3  omega_s,
-    vec3  L_e,
-    float p_light,
-    float rho,
-    float u_gxy1, float u_gxy2
-);
+vec3 eval_nee_contribution(const GpisHitInfo &hit,
+                           vec3 omega_o,
+                           vec3 omega_s,
+                           vec3 L_e,
+                           float p_light,
+                           float rho,
+                           float u_gxy1,
+                           float u_gxy2);
 
 } // namespace m3hair

@@ -1,8 +1,9 @@
 #pragma once
-#include <embree4/rtcore.h>
-#include "hair_loader.h"
 #include "gpis_nee.h"
+#include "hair_loader.h"
 #include "math.h"
+
+#include <embree4/rtcore.h>
 
 namespace m3hair {
 
@@ -16,9 +17,9 @@ namespace m3hair {
 // u_val into RTCHit.v so the renderer can pass them to the next bounce.
 // ---------------------------------------------------------------------------
 struct CondState {
-    vec3    u_grad;   // gradient conditioning weights
-    float   u_val;    // value conditioning weight
-    bool    valid;    // false on camera rays (depth=0)
+    vec3 u_grad; // gradient conditioning weights
+    float u_val; // value conditioning weight
+    bool valid;  // false on camera rays (depth=0)
 };
 extern thread_local CondState tl_cond;
 
@@ -27,13 +28,13 @@ extern thread_local CondState tl_cond;
 // Each B-spline segment becomes one user primitive.
 // Returns the geomID assigned by Embree.
 // ---------------------------------------------------------------------------
-unsigned add_user_hair(RTCDevice device, RTCScene scene, const HairData& hair);
+unsigned add_user_hair(RTCDevice device, RTCScene scene, const HairData &hair);
 
 // ---------------------------------------------------------------------------
 // Reconstruct GpisHitInfo from an RTCRayHit record + the current HairData.
 // Call after a successful rtcIntersect1 / rtcIntersectN.
 // Note: info.gz is zeroed — fill it from your saved MarchResult or recompute.
 // ---------------------------------------------------------------------------
-GpisHitInfo extract_hit_info(const RTCRayHit& rh, const HairData& hair);
+GpisHitInfo extract_hit_info(const RTCRayHit &rh, const HairData &hair);
 
 } // namespace m3hair

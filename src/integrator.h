@@ -1,11 +1,12 @@
 #pragma once
-#include <cstdint>
-#include <embree4/rtcore.h>
-#include <vector>
 #include "bsdf_deon.h"
 #include "hair_loader.h"
 #include "light.h"
 #include "math.h"
+
+#include <cstdint>
+#include <embree4/rtcore.h>
+#include <vector>
 
 namespace m3hair {
 
@@ -25,17 +26,17 @@ struct RNG {
 
 // Reconstruct the fiber tangent at a hit point.
 // primID indexes into hair.indices; u is the B-spline parameter in [0,1].
-vec3 bspline_tangent(const HairData& hair, unsigned primID, float u);
+vec3 bspline_tangent(const HairData &hair, unsigned primID, float u);
 
 // Full path tracer with NEE + Russian roulette.
 // hairs[i] must correspond to geomID i in the Embree scene.
 // params[i] holds the BSDF parameters for geometry i (or use params[0] for all).
-vec3 trace_path(const Ray& ray,
+vec3 trace_path(const Ray &ray,
                 RTCScene scene,
-                const DirectionalLight& light,
-                const std::vector<const HairData*>& hairs,
-                const std::vector<DeonParams>& params,
+                const DirectionalLight &light,
+                const std::vector<const HairData *> &hairs,
+                const std::vector<DeonParams> &params,
                 int max_depth,
-                RNG& rng);
+                RNG &rng);
 
 } // namespace m3hair
