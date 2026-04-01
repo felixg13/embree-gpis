@@ -1,22 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-# ---------------------------------------------------------------------------
-# Usage: ./render.sh [scene] [extra gpis_hair flags...]
-#
-# Scenes:
-#   instant    — one curl, 400x300, 1spp  (instant feedback)
-#   test       — one curl, 600x400, 8spp  (quick quality check)
-#   dual       — curl + straight hair side by side (default)
-#   curls      — four curls in a row with spacing
-#   hair       — straight hair asset alone, close up
-#   compare    — same curl twice, for BSDF comparison
-#   profile    — two hair meshes side by side; right one rotated 90° for side view
-#   gpis       — one curl, raymarching mode, 400x300, 4spp
-# ---------------------------------------------------------------------------
-
 SCENE="${1:-dual}"
-shift || true   # remaining args forwarded to gpis_hair
+shift || true
 
 cmake --build build 2>&1 | grep -v "^\[" || true
 
@@ -96,7 +82,7 @@ case "$SCENE" in
       -o "$OUT" "$@"
     ;;
 
- curl_gpis)
+  curl_gpis)
     ./build/gpis_hair \
       assets/curl.m3hair \
       --spp 16 --width 1000 --height 1000 \
@@ -114,7 +100,7 @@ case "$SCENE" in
 
   *)
     echo "Unknown scene: $SCENE"
-    echo "Available: instant | test | dual | curls | hair | compare | profile | gpis"
+    echo "Available: instant | test | test_gpis | dual | curls | hair | compare | profile | profile_gpis | curl_gpis | gpis"
     exit 1
     ;;
 esac

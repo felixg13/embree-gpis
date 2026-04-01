@@ -1,4 +1,3 @@
-// Standalone BSDF unit tests — compiled as a separate executable.
 #include "bsdf_deon.h"
 
 #include <cmath>
@@ -9,43 +8,33 @@ using namespace m3hair;
 
 static constexpr float PI = 3.14159265358979f;
 
-// Build a direction from longitudinal angle theta and azimuthal phi
-// relative to tangent T = (0,0,1), with reference perpendicular (1,0,0).
 static vec3 dir_from_angles(float theta, float phi) {
     float ct = cosf(theta), st = sinf(theta);
     return {ct * cosf(phi), ct * sinf(phi), st};
 }
 
-// -----------------------------------------------------------------------
-// Test 1: White furnace — sigma_a=0, integrate f*cos(theta_o) over sphere.
-// Expected: result <= 1.0 + eps for all wi.
-// -----------------------------------------------------------------------
 static bool test_white_furnace() {
     DeonParams p;
-    p.sigma_a    = {0.f, 0.f, 0.f}; // no absorption
+    p.sigma_a    = {0.f, 0.f, 0.f};
     const vec3 T = {0.f, 0.f, 1.f};
 
     bool passed = true;
-    // Test two incident directions
     for (float theta_i : {0.f, 0.3f, -0.5f}) {
         for (float phi_i : {0.f, 1.0f}) {
             vec3 wi = dir_from_angles(theta_i, phi_i);
 
-            // Stratified grid on the sphere parameterised by (theta_o, phi_o)
             const int NT = 60, NP = 120;
             float integral[3] = {0, 0, 0};
             float dtheta      = PI / NT;
             float dphi        = 2.f * PI / NP;
 
             for (int it = 0; it < NT; ++it) {
-                // theta_o in (-pi/2, pi/2)
                 float theta_o = -PI * 0.5f + (it + 0.5f) * dtheta;
                 float cos_to  = cosf(theta_o);
                 for (int ip = 0; ip < NP; ++ip) {
-                    float phi_o = (ip + 0.5f) * dphi;
-                    vec3 wo     = dir_from_angles(theta_o, phi_o);
-                    vec3 f      = eval_deon(wi, wo, T, p);
-                    // dwo = cos(theta_o) dtheta dphi, multiply by |cos(theta_o)| for rendering eq
+                    float phi_o  = (ip + 0.5f) * dphi;
+                    vec3 wo      = dir_from_angles(theta_o, phi_o);
+                    vec3 f       = eval_deon(wi, wo, T, p);
                     float weight = cos_to * cos_to * dtheta * dphi;
                     integral[0] += f.x * weight;
                     integral[1] += f.y * weight;
@@ -68,15 +57,11 @@ static bool test_white_furnace() {
     return passed;
 }
 
-// -----------------------------------------------------------------------
-// Test 2: Reciprocity — f(wi,wo) == f(wo,wi) within 1e-3.
-// -----------------------------------------------------------------------
 static bool test_reciprocity() {
     DeonParams p;
     const vec3 T = {0.f, 0.f, 1.f};
     bool passed  = true;
 
-    // Structured sample of pairs
     float thetas[] = {0.0f, 0.3f, -0.4f, 0.7f};
     float phis[]   = {0.0f, 1.0f, 2.5f, 4.0f};
     for (float ti : thetas)
@@ -103,11 +88,6 @@ static bool test_reciprocity() {
     return passed;
 }
 
-// -----------------------------------------------------------------------
-// Test 3: R-only lobe peaks near specular cone.
-// When beta_TT and beta_TRT are set to near-zero, the R lobe should give
-// the highest value for wi and wo close to the specular direction.
-// -----------------------------------------------------------------------
 static bool test_R_lobe_specular() {
     DeonParams p;
     p.sigma_a    = {0.f, 0.f, 0.f};
@@ -115,10 +95,7 @@ static bool test_R_lobe_specular() {
     p.beta_TRT   = 1e-6f;
     const vec3 T = {0.f, 0.f, 1.f};
 
-    // For pure R, with tilt alpha=0 and beta_n small, the peak should be
-    // near phi=0 (same azimuth, reflected longitude).
-    vec3 wi = dir_from_angles(0.3f, 0.f);
-    // Specular direction: theta_o ~ theta_i, phi_o ~ 0 (R reflects symmetrically)
+    vec3 wi      = dir_from_angles(0.3f, 0.f);
     vec3 wo_spec = dir_from_angles(-0.3f, 0.f);
     vec3 wo_off  = dir_from_angles(0.3f, 2.f);
 
@@ -137,7 +114,6 @@ static bool test_R_lobe_specular() {
     return ok;
 }
 
-// -----------------------------------------------------------------------
 int main() {
     spdlog::set_pattern("[%T.%e] [%^%l%$] %v");
     spdlog::info("=== d'Eon BSDF unit tests ===");

@@ -6,16 +6,8 @@
 
 namespace m3hair {
 
-// ---------------------------------------------------------------------------
-// Cubic B-spline tangent at parameter u in [0,1] for segment with CPs p0..p3.
-// Derivative of the de Boor basis: dB/du at u.
-// ---------------------------------------------------------------------------
+// dB/du for cubic uniform B-spline
 static vec3 bspline_tangent_at(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float u) {
-    // Derivative of cubic uniform B-spline basis
-    // dB0/du = -u²/2 + u - 1/2
-    // dB1/du = 3u²/2 - 2u
-    // dB2/du = -3u²/2 + u + 1/2
-    // dB3/du = u²/2
     float u2 = u * u;
     float d0 = -u2 * 0.5f + u - 0.5f;
     float d1 = u2 * 1.5f - 2.f * u;
@@ -35,10 +27,6 @@ vec3 bspline_tangent(const HairData &hair, unsigned primID, float u) {
     return len > 1e-6f ? T / len : vec3{0.f, 1.f, 0.f};
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 static RTCRayHit make_ray(const Ray &r) {
     RTCRayHit rh{};
     rh.ray.org_x  = r.origin.x;
@@ -57,10 +45,6 @@ static RTCRayHit make_ray(const Ray &r) {
 static float lum(const vec3 &v) {
     return 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z;
 }
-
-// ---------------------------------------------------------------------------
-// Path tracer
-// ---------------------------------------------------------------------------
 
 vec3 trace_path(const Ray &ray,
                 RTCScene scene,
@@ -83,9 +67,8 @@ vec3 trace_path(const Ray &ray,
         rtcIntersect1(scene, &rh, &iargs);
 
         if (rh.hit.geomID == RTC_INVALID_GEOMETRY_ID)
-            break; // miss → black bg
+            break;
 
-        // Select geometry data for this hit
         unsigned geom_idx    = std::min((unsigned)rh.hit.geomID, (unsigned)(hairs.size() - 1));
         const HairData &hair = *hairs[geom_idx];
         const DeonParams &dp = params[std::min(geom_idx, (unsigned)(params.size() - 1))];
@@ -96,9 +79,8 @@ vec3 trace_path(const Ray &ray,
                         cur.origin.y + rh.ray.tfar * cur.dir.y,
                         cur.origin.z + rh.ray.tfar * cur.dir.z};
 
-        vec3 wo = -cur.dir; // view direction (toward camera)
+        vec3 wo = -cur.dir;
 
-        // --- NEE: shadow ray toward light ---
         {
             RTCRay shadow{};
             shadow.org_x = hit_pos.x;
@@ -113,15 +95,13 @@ vec3 trace_path(const Ray &ray,
 
             rtcOccluded1(scene, &shadow, &oargs);
 
-            if (shadow.tfar > 0.f) { // not occluded (Embree sets tfar=-inf on hit)
-                vec3 wi_light = light.direction;
-                vec3 f        = eval_deon(wi_light, wo, T, dp);
-                float cos_o   = std::abs(dot(wi_light, T));
-                L             = L + throughput * f * light.radiance * cos_o;
+            if (shadow.tfar > 0.f) {
+                vec3 f      = eval_deon(light.direction, wo, T, dp);
+                float cos_o = std::abs(dot(light.direction, T));
+                L           = L + throughput * f * light.radiance * cos_o;
             }
         }
 
-        // --- Russian roulette at depth >= 3 ---
         if (depth >= 3) {
             float q = std::min(lum(throughput), 0.95f);
             if (rng.next_f() > q)
@@ -129,7 +109,6 @@ vec3 trace_path(const Ray &ray,
             throughput = throughput * (1.f / q);
         }
 
-        // --- Sample BSDF for next ray ---
         vec3 wi_new;
         float pdf;
         vec3 f = sample_deon(

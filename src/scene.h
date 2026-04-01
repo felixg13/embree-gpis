@@ -10,10 +10,8 @@ class Scene {
     explicit Scene(RTCDevice device);
     ~Scene();
 
-    // Build (or rebuild) the Embree scene from hair data.
-    // Multiple calls to add_hair() followed by commit().
-    void add_hair(const HairData &hair);      // Embree round B-spline curves
-    void add_user_hair(const HairData &hair); // GPIS user geometry (raymarching)
+    void add_hair(const HairData &hair);
+    void add_user_hair(const HairData &hair);
     void commit();
 
     RTCScene handle() const { return m_scene; }

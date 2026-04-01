@@ -32,7 +32,6 @@ static void flush_block(HairData &out,
     const int base = static_cast<int>(out.vertices.size());
 
     for (auto &v : block) {
-        // Y-axis rotation then translate
         float rx = v.x * cos_ry + v.z * sin_ry;
         float rz = -v.x * sin_ry + v.z * cos_ry;
         v.x      = rx + offset.x;

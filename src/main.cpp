@@ -21,12 +21,9 @@
 #include <tbb/parallel_for.h>
 #include <vector>
 
-// ---------------------------------------------------------------------------
-// CLI
-// ---------------------------------------------------------------------------
 struct Args {
     std::vector<std::string> files;
-    std::vector<float> rotations; // per-file Y-axis rotation in degrees
+    std::vector<float> rotations;
     int width          = 1200;
     int height         = 600;
     int spp            = 16;
@@ -96,16 +93,12 @@ static Args parse_args(int argc, char *argv[]) {
             a.files.push_back(std::string(s));
         }
     }
-    if (a.files.empty()) {
-        // default demo: both assets with manual placement
+    if (a.files.empty())
         a.files = {"assets/curl.m3hair", "assets/hair.m3hair"};
-    }
     return a;
 }
 
-// ---------------------------------------------------------------------------
-// Auto-framing camera — fits all loaded geometry into the frame
-// ---------------------------------------------------------------------------
+// fit all geometry into frame at ~85% fill
 static m3hair::Camera auto_camera(const std::vector<m3hair::HairData> &all_hair, int W, int H) {
     float xmin = 1e30f, xmax = -1e30f;
     float ymin = 1e30f, ymax = -1e30f;
@@ -125,7 +118,6 @@ static m3hair::Camera auto_camera(const std::vector<m3hair::HairData> &all_hair,
     float aspect   = (float)W / (float)H;
     float fov_deg  = 65.f;
     float half_fov = fov_deg * 0.5f * (3.14159265f / 180.f);
-    // Distance so the wider dimension fills ~85% of the frame
     float d_from_w = (scene_w / aspect) / (2.f * std::tan(half_fov)) / 0.85f;
     float d_from_h = scene_h / (2.f * std::tan(half_fov)) / 0.85f;
     float d        = std::max(d_from_w, d_from_h);
@@ -133,7 +125,6 @@ static m3hair::Camera auto_camera(const std::vector<m3hair::HairData> &all_hair,
     return m3hair::make_camera(W, H, {cx, cy, cam_z}, {cx, cy, (zmin + zmax) * 0.5f}, fov_deg);
 }
 
-// ---------------------------------------------------------------------------
 int main(int argc, char *argv[]) {
     spdlog::set_pattern("[%T.%e] [%^%l%$] %v");
 
@@ -145,7 +136,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Load each file with X offset i*spacing
     spdlog::info("Loading {} asset(s)", a.files.size());
     std::vector<m3hair::HairData> all_hair;
     all_hair.reserve(a.files.size());
@@ -166,13 +156,11 @@ int main(int argc, char *argv[]) {
     scene.commit();
     spdlog::info("Scene committed");
 
-    // Camera: auto-frame all geometry
     m3hair::Camera cam = auto_camera(all_hair, a.width, a.height);
 
     m3hair::Image img(a.width, a.height);
     m3hair::DirectionalLight light = m3hair::DirectionalLight::make_default();
 
-    // One default DeonParams per geometry
     std::vector<const m3hair::HairData *> hair_ptrs;
     std::vector<m3hair::DeonParams> dparams;
     for (const auto &h : all_hair) {
@@ -207,8 +195,7 @@ int main(int argc, char *argv[]) {
                     img.at(x, y) = acc * (1.f / a.spp);
                 }
             }
-            int t = ++done_tiles;
-            // Log at each 10% milestone — fires exactly once per crossing
+            int t       = ++done_tiles;
             int new_pct = (int)(100.f * t / total_tiles);
             int old_pct = (int)(100.f * (t - 1) / total_tiles);
             if ((new_pct / 10) > (old_pct / 10)) {

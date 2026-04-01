@@ -1,9 +1,6 @@
 #pragma once
 #include <cmath>
 
-// ---------------------------------------------------------------------------
-// vec2
-// ---------------------------------------------------------------------------
 struct vec2 {
     float x{}, y{};
     vec2() = default;
@@ -23,16 +20,11 @@ inline float length(const vec2 &v) {
     return std::sqrt(dot(v, v));
 }
 
-// ---------------------------------------------------------------------------
-// float4 — Embree vertex layout: x, y, z, radius
-// ---------------------------------------------------------------------------
+// x, y, z, radius — Embree vertex layout
 struct float4 {
     float x, y, z, w;
 };
 
-// ---------------------------------------------------------------------------
-// vec3
-// ---------------------------------------------------------------------------
 struct vec3 {
     float x{}, y{}, z{};
 
@@ -63,7 +55,6 @@ struct vec3 {
 inline vec3 operator*(float t, const vec3 &v) {
     return v * t;
 }
-
 inline float dot(const vec3 &a, const vec3 &b) {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
@@ -86,9 +77,6 @@ inline vec3 clamp(const vec3 &v, float lo, float hi) {
     return {c(v.x), c(v.y), c(v.z)};
 }
 
-// ---------------------------------------------------------------------------
-// Ray
-// ---------------------------------------------------------------------------
 struct Ray {
     vec3 origin;
     vec3 dir;

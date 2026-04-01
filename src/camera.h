@@ -7,13 +7,11 @@ namespace m3hair {
 
 struct Camera {
     vec3 origin;
-    vec3 lower_left; // ray = lower_left + u*horizontal + v*vertical
+    vec3 lower_left;
     vec3 horizontal;
     vec3 vertical;
     int width{}, height{};
 
-    // px, py in pixel coordinates (0..width-1, 0..height-1)
-    // Add 0.5 for pixel centre, or jitter for AA.
     Ray generate_ray(float px, float py) const {
         float u  = px / static_cast<float>(width);
         float v  = (static_cast<float>(height) - 1.0f - py) / static_cast<float>(height);
@@ -42,7 +40,6 @@ inline Camera make_camera(
     return cam;
 }
 
-// Default: origin (0,5,20), target (0,5,0), fov 45 deg
 inline Camera make_default_camera(int w, int h) {
     return make_camera(w, h, {0.f, 5.f, 20.f}, {0.f, 5.f, 0.f}, 45.f);
 }
