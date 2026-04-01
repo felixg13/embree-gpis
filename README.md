@@ -6,8 +6,6 @@ Path tracer for hair rendered as Gaussian Process Implicit Surfaces (GPIS), buil
 |:---:|:---:|
 | ![](renders-push/profile16spp1000.png) | ![](renders-push/profile_gpis16spp1000.png) |
 
-Hair assets (`assets/`) are stored with [Git LFS](https://git-lfs.com). Install it and run `git lfs pull` after cloning.
-
 ## Dependencies
 
 | Package | Version |
@@ -29,6 +27,8 @@ sudo pacman -S embree tbb cmake clang
 cmake -B build
 cmake --build build
 ```
+
+Hair assets (`assets/`) are stored with [Git LFS](https://git-lfs.com). Install it and run `git lfs pull` after cloning.
 
 ## Run
 
@@ -75,3 +75,5 @@ Options:
 Kehan Xu, Benedikt Bitterli, Eugene d'Eon, Wojciech Jarosz — *Practical Gaussian Process Implicit Surfaces with Sparse Convolutions*, ACM Trans. Graph. (SIGGRAPH Asia) 44(6), 2025. https://doi.org/10.1145/3763329
 
 Dario Seyb, Eugene d'Eon, Benedikt Bitterli, Wojciech Jarosz — *From microfacets to participating media: A unified theory of light transport with stochastic geometry*, ACM Trans. Graph. (SIGGRAPH) 43(4), 2024. https://doi.org/10/gt5nh9
+
+Eugene d'Eon, Guillaume François, Martin Hill, Joe Letteri, Jean-Marie Aubry — *An Energy-Conserving Hair Reflectance Model*, Computer Graphics Forum 30(4), 2011. https://doi.org/10.1111/j.1467-8659.2011.01976.x
