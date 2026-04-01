@@ -1,6 +1,6 @@
 #include "scene.h"
 
-#include "user_geo.h"
+#include "gpis_geo.h"
 
 #include <stdexcept>
 

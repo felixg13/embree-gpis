@@ -1,7 +1,7 @@
 // GPIS user geometry for Embree — sparse convolution noise over B-spline tubes.
 // Cells are seeded deterministically so any ray hitting the same point gets the same noise.
 
-#include "user_geo.h"
+#include "gpis_geo.h"
 
 #include "gpis_nee.h"
 #include "math.h"

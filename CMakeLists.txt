@@ -42,7 +42,7 @@ set(LIB_SOURCES
     src/image.cpp
     src/bsdf_deon.cpp
     src/integrator.cpp
-    src/user_geo.cpp
+    src/gpis_geo.cpp
     src/gpis_nee.cpp
 )
 

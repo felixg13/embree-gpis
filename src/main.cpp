@@ -6,7 +6,7 @@
 #include "light.h"
 #include "math.h"
 #include "scene.h"
-#include "user_geo.h"
+#include "gpis_geo.h"
 
 #include <atomic>
 #include <chrono>
