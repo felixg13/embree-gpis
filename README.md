@@ -6,6 +6,8 @@ Path tracer for hair rendered as Gaussian Process Implicit Surfaces (GPIS), buil
 |:---:|:---:|
 | ![](renders-push/profile16spp1000.png) | ![](renders-push/profile_gpis16spp1000.png) |
 
+Hair assets (`assets/`) are stored with [Git LFS](https://git-lfs.com). Install it and run `git lfs pull` after cloning.
+
 ## Dependencies
 
 | Package | Version |
