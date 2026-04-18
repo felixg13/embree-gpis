@@ -13,6 +13,7 @@ struct HairData {
     int num_curves   = 0;
     int num_segments = 0;
     float amplitude  = 0.f;
+    float cell_size  = 0.05f;
     uint32_t seed    = 0xdeadbeef;
 };
 

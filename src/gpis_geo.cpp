@@ -1,6 +1,3 @@
-// GPIS user geometry for Embree — sparse convolution noise over B-spline tubes.
-// Cells are seeded deterministically so any ray hitting the same point gets the same noise.
-
 #include "gpis_geo.h"
 
 #include "gpis_nee.h"
@@ -25,57 +22,6 @@ static vec3 bspline_pos(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float t) {
     return p0 * b0 + p1 * b1 + p2 * b2 + p3 * b3;
 }
 
-// coarse grid search + 2 bisection refinements
-static float closest_t(vec3 p0, vec3 p1, vec3 p2, vec3 p3, vec3 x) {
-    float best_t = 0.f, best_d2 = 1e30f;
-    for (int i = 0; i <= 12; ++i) {
-        float t  = i / 12.f;
-        vec3 pt  = bspline_pos(p0, p1, p2, p3, t);
-        float d2 = dot(pt - x, pt - x);
-        if (d2 < best_d2) {
-            best_d2 = d2;
-            best_t  = t;
-        }
-    }
-    float eps = 1.f / 24.f;
-    for (int iter = 0; iter < 2; ++iter) {
-        vec3 pa  = bspline_pos(p0, p1, p2, p3, std::max(0.f, best_t - eps));
-        vec3 pb  = bspline_pos(p0, p1, p2, p3, std::min(1.f, best_t + eps));
-        float da = dot(pa - x, pa - x), db = dot(pb - x, pb - x);
-        if (da < best_d2) {
-            best_d2 = da;
-            best_t  = std::max(0.f, best_t - eps);
-        }
-        if (db < best_d2) {
-            best_d2 = db;
-            best_t  = std::min(1.f, best_t + eps);
-        }
-        eps *= 0.5f;
-    }
-    return best_t;
-}
-
-static float mean_field_val(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float r, vec3 x) {
-    float t = closest_t(p0, p1, p2, p3, x);
-    vec3 cp = bspline_pos(p0, p1, p2, p3, t);
-    vec3 d  = x - cp;
-    return r - sqrtf(dot(d, d));
-}
-
-static float mean_field(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float r, vec3 x, vec3 &out_grad_mu) {
-    float t    = closest_t(p0, p1, p2, p3, x);
-    vec3 cp    = bspline_pos(p0, p1, p2, p3, t);
-    vec3 d     = x - cp;
-    float dist = sqrtf(dot(d, d));
-    if (dist < 1e-7f) {
-        out_grad_mu = {0.f, 1.f, 0.f};
-        return r;
-    }
-    out_grad_mu = d * (1.f / dist);
-    return r - dist;
-}
-
-// gaussian kernel, l = cell_size/3, variance = N * pi^(3/2) / 27
 static constexpr int SC_IMPULSES = 10;
 static constexpr float SC_KERNEL_VAR = (float)SC_IMPULSES * 3.14159265f * 1.7724538509f / 27.f;
 
@@ -92,7 +38,6 @@ inline float kappa_dd0(float l2) {
 }
 
 static uint32_t cell_hash(int32_t ix, int32_t iy, int32_t iz, uint32_t seed) {
-    // FNV-1a-style mixing
     uint32_t h = seed ^ 2166136261u;
     h ^= (uint32_t)ix * 2654435761u;
     h ^= h >> 16;
@@ -213,7 +158,6 @@ static bool ray_aabb(float ox,
     return t0 <= t1;
 }
 
-// expanded by noise amplitude to guarantee f < 0 at AABB entry
 static RTCBounds segment_aabb(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float r, float amplitude) {
     const float rr = r * (1.f + 3.f * amplitude);
     RTCBounds b;
@@ -254,6 +198,7 @@ static MarchResult march_segment(float ox,
                                  const RTCBounds &aabb,
                                  float tnn,
                                  float amplitude,
+                                 float cell_size,
                                  uint32_t seed) {
     MarchResult result{};
 
@@ -265,84 +210,63 @@ static MarchResult march_segment(float ox,
     if (!ray_aabb(ox, oy, oz, idx, idy, idz, tnn, tff, aabb, t0, t1))
         return result;
 
-    const float cell_size = r;
-    const float l2        = cell_size * cell_size / 9.f;
+    const vec3 O = {ox, oy, oz};
+    const vec3 D = {dx, dy, dz};
 
-    // Lipschitz step bound: L = 1 + amplitude * sqrt(N_overlap) / (l * sqrt(Var)) * exp(-0.5)
-    const float inv_norm  = 1.f / sqrtf(SC_KERNEL_VAR);
-    const float inv_l     = 3.f / cell_size;
-    const float L_psi     = sqrtf((float)(SC_IMPULSES * 27)) * inv_l * expf(-0.5f) * inv_norm;
-    const float step_safe = 1.f / (1.f + amplitude * L_psi);
+    constexpr int N = 16;
+    vec3 caps[N + 1];
+    for (int i = 0; i <= N; ++i)
+        caps[i] = bspline_pos(p0, p1, p2, p3, i / (float)N);
 
-    const float span = t1 - t0;
-    float step       = std::min(span / 4.f, step_safe);
-    int nsteps       = (int)ceilf(span / step) + 1;
-    nsteps           = std::min(nsteps, 256);
+    const float L_noise = (amplitude > 0.f && cell_size > 1e-8f)
+                        ? SC_IMPULSES * 27.f * 0.60653f * (3.f / cell_size) / sqrtf(SC_KERNEL_VAR)
+                        : 0.f;
+    const float L_total = 1.f + amplitude * L_noise;
 
-    auto eval_f = [&](float t) -> float {
-        vec3 x   = {ox + dx * t, oy + dy * t, oz + dz * t};
-        float mu = mean_field_val(p0, p1, p2, p3, r, x);
-        float f  = mu + amplitude * scnoise_val(x, cell_size, seed);
+    const float hit_eps  = r * 1e-3f;
+    const float min_step = r * 1e-5f;
+    constexpr int MAX_STEPS = 256;
 
-        if (tl_cond.valid) {
-            vec3 delta       = {x.x - ox, x.y - oy, x.z - oz};
-            float r2         = dot(delta, delta);
-            float kv         = kappa(r2, l2);
-            float grad_splat = (-1.f / (2.f * l2)) * kv * dot(delta, tl_cond.u_grad);
-            f += kv * tl_cond.u_val + grad_splat;
+    float t = t0;
+
+    for (int step = 0; step < MAX_STEPS; ++step) {
+        if (t > t1) break;
+
+        const vec3 Q = O + D * t;
+
+        float min_dist_sq = 1e30f;
+        vec3  closest_v   = {};
+
+        for (int i = 0; i < N; ++i) {
+            const vec3  A    = caps[i];
+            const vec3  AB   = caps[i + 1] - A;
+            const float len2 = dot(AB, AB);
+            const float s    = (len2 > 1e-12f)
+                             ? std::clamp(dot(Q - A, AB) / len2, 0.f, 1.f)
+                             : 0.f;
+            const vec3  v    = Q - (A + AB * s);
+            const float d2   = dot(v, v);
+            if (d2 < min_dist_sq) { min_dist_sq = d2; closest_v = v; }
         }
 
-        return f;
-    };
+        const float min_dist = sqrtf(min_dist_sq);
 
-    float f_prev = eval_f(t0);
-    int sign0    = (f_prev >= 0.f) ? 1 : -1;
+        float noise_val  = 0.f;
+        vec3  noise_grad = {};
+        if (amplitude > 0.f)
+            scnoise_val_grad(Q, cell_size, seed, noise_val, noise_grad);
 
-    for (int s = 1; s <= nsteps; ++s) {
-        float t_cur = t0 + s * step;
-        float f_cur = eval_f(t_cur);
-        int sign1   = (f_cur >= 0.f) ? 1 : -1;
+        const float phi = min_dist - r - amplitude * noise_val;
 
-        if (sign0 < 0 && sign1 > 0) {
-            float ta = t_cur - step;
-            float tb = t_cur;
-            for (int iter = 0; iter < 8; ++iter) {
-                float tm = 0.5f * (ta + tb);
-                float fm = eval_f(tm);
-                if ((fm >= 0.f ? 1 : -1) == sign0)
-                    ta = tm;
-                else
-                    tb = tm;
-            }
-            float t_hit = 0.5f * (ta + tb);
-            if (t_hit >= tff)
-                return result;
-
-            vec3 x_hit = {ox + dx * t_hit, oy + dy * t_hit, oz + dz * t_hit};
-            vec3 grad_mu;
-            mean_field(p0, p1, p2, p3, r, x_hit, grad_mu);
-            float noise_val;
-            vec3 noise_grad;
-            scnoise_val_grad(x_hit, cell_size, seed, noise_val, noise_grad);
-
-            vec3 ng      = grad_mu + noise_grad * amplitude;
-            float ng_len = sqrtf(dot(ng, ng));
-            if (ng_len < 1e-7f)
-                ng = grad_mu;
-            else
-                ng = ng * (1.f / ng_len);
-
-            return {t_hit,
-                    closest_t(p0, p1, p2, p3, x_hit),
-                    ng,
-                    -noise_val,
-                    noise_grad * (-2.f * l2),
-                    dot(noise_grad, {dx, dy, dz}),
-                    noise_val,
-                    true};
+        if (phi <= hit_eps) {
+            const vec3 n_cap  = (min_dist > 1e-8f)
+                              ? closest_v * (1.f / min_dist)
+                              : vec3{0.f, 1.f, 0.f};
+            const vec3 normal = normalize(n_cap - noise_grad * amplitude);
+            return {t, 0.f, normal, 0.f, {0.f, 0.f, 0.f}, 0.f, 0.f, true};
         }
 
-        f_prev = f_cur;
+        t += std::max(phi / L_total, min_step);
     }
 
     return result;
@@ -398,7 +322,8 @@ static void intersect_cb(const RTCIntersectFunctionNArguments *args) {
         float tff = RTCRayN_tfar(rayN, N, i);
 
         MarchResult res = march_segment(
-            ox, oy, oz, ddx, ddy, ddz, tff, p0, p1, p2, p3, r, aabb, tnn, amplitude, hair->seed);
+            ox, oy, oz, ddx, ddy, ddz, tff, p0, p1, p2, p3, r, aabb, tnn,
+            amplitude, hair->cell_size, hair->seed);
         if (!res.hit)
             continue;
 
@@ -448,7 +373,8 @@ static void occluded_cb(const RTCOccludedFunctionNArguments *args) {
         float tff = RTCRayN_tfar(rayN, N, i);
 
         MarchResult res = march_segment(
-            ox, oy, oz, ddx, ddy, ddz, tff, p0, p1, p2, p3, r, aabb, tnn, amplitude, hair->seed);
+            ox, oy, oz, ddx, ddy, ddz, tff, p0, p1, p2, p3, r, aabb, tnn,
+            amplitude, hair->cell_size, hair->seed);
         if (res.hit) {
             // bit-cast to avoid UB under -ffast-math
             static const uint32_t neg_inf_bits = 0xFF800000u;

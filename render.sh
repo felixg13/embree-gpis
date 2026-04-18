@@ -25,10 +25,15 @@ case "$SCENE" in
     ;;
 
   test_gpis)
+    AMPLITUDE="${AMPLITUDE:-0}"
+    CELL_SIZE="${CELL_SIZE:-0.05}"
     ./build/gpis_hair \
-      assets/curl.m3hair \
+      assets/hair.m3hair \
       --spp 8 --width 400 --height 400 \
+      --rotate 0:90 \
       --mode raymarching \
+      --amplitude "$AMPLITUDE" \
+      --cell-size "$CELL_SIZE" \
       -o "$OUT" "$@"
     ;;
 

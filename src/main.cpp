@@ -29,6 +29,8 @@ struct Args {
     int spp            = 16;
     int depth          = 4;
     float spacing      = 2.0f;
+    float amplitude    = 0.f;
+    float cell_size    = 0.05f;
     std::string output = "renders/out.ppm";
     std::string mode   = "embree";
 };
@@ -42,7 +44,9 @@ static void usage(const char *argv0) {
                "  --spacing <float>  X spacing between assets (default: 2.0)\n"
                "  --rotate  IDX:DEG  Y-axis rotation for mesh at index IDX (e.g. 1:90)\n"
                "  -o <path>          output PPM (default: renders/out.ppm)\n"
-               "  --mode <string>    embree|raymarching (default: embree)\n",
+               "  --mode <string>    embree|raymarching (default: embree)\n"
+               "  --amplitude <f>    GPIS noise amplitude as fraction of r (default: 0)\n"
+               "  --cell-size <f>    noise cell size in world units (default: 0.05)\n",
                argv0);
 }
 
@@ -71,6 +75,10 @@ static Args parse_args(int argc, char *argv[]) {
             a.output = std::string(next());
         else if (s == "--mode")
             a.mode = std::string(next());
+        else if (s == "--amplitude")
+            a.amplitude = std::stof(std::string(next()));
+        else if (s == "--cell-size")
+            a.cell_size = std::stof(std::string(next()));
         else if (s == "--rotate") {
             std::string val = std::string(next());
             auto colon      = val.find(':');
@@ -143,6 +151,8 @@ int main(int argc, char *argv[]) {
         vec3 offset   = {i * a.spacing, 0.f, 0.f};
         float rot_deg = i < (int)a.rotations.size() ? a.rotations[i] : 0.f;
         all_hair.push_back(m3hair::load_m3hair(a.files[i], offset, rot_deg));
+        all_hair.back().amplitude = a.amplitude;
+        all_hair.back().cell_size = a.cell_size;
     }
 
     spdlog::info("Building scene (mode={})", a.mode);
