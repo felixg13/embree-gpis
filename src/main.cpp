@@ -156,69 +156,73 @@ int main(int argc, char *argv[]) {
     }
 
     spdlog::info("Building scene (mode={})", a.mode);
-    m3hair::Scene scene(device);
-    for (const auto &h : all_hair) {
-        if (a.mode == "raymarching")
-            scene.add_user_hair(h);
-        else
-            scene.add_hair(h);
-    }
-    scene.commit();
-    spdlog::info("Scene committed");
-
-    m3hair::Camera cam = auto_camera(all_hair, a.width, a.height);
 
     m3hair::Image img(a.width, a.height);
-    m3hair::DirectionalLight light = m3hair::DirectionalLight::make_default();
 
-    std::vector<const m3hair::HairData *> hair_ptrs;
-    std::vector<m3hair::DeonParams> dparams;
-    for (const auto &h : all_hair) {
-        hair_ptrs.push_back(&h);
-        dparams.emplace_back();
-    }
+    {
+        m3hair::Scene scene(device);
+        for (const auto &h : all_hair) {
+            if (a.mode == "raymarching")
+                scene.add_user_hair(h);
+            else
+                scene.add_hair(h);
+        }
+        scene.commit();
+        spdlog::info("Scene committed");
 
-    const int total_tiles = ((a.width + 15) / 16) * ((a.height + 15) / 16);
-    std::atomic<int> done_tiles{0};
-    spdlog::info("Rendering {}x{} @ {} spp  mode={}  ({} tiles)",
-                 a.width,
-                 a.height,
-                 a.spp,
-                 a.mode,
-                 total_tiles);
+        m3hair::Camera cam = auto_camera(all_hair, a.width, a.height);
 
-    auto t_start = std::chrono::steady_clock::now();
+        m3hair::DirectionalLight light = m3hair::DirectionalLight::make_default();
 
-    tbb::parallel_for(
-        tbb::blocked_range2d<int>(0, a.height, 16, 0, a.width, 16),
-        [&](const tbb::blocked_range2d<int> &r) {
-            for (int y = r.rows().begin(); y < r.rows().end(); ++y) {
-                for (int x = r.cols().begin(); x < r.cols().end(); ++x) {
-                    m3hair::RNG rng((uint32_t)(y * a.width + x + 1));
-                    vec3 acc(0.f);
-                    for (int s = 0; s < a.spp; ++s) {
-                        Ray ray = cam.generate_ray(x + rng.next_f(), y + rng.next_f());
-                        acc =
-                            acc + m3hair::trace_path(
-                                      ray, scene.handle(), light, hair_ptrs, dparams, a.depth, rng);
+        std::vector<const m3hair::HairData *> hair_ptrs;
+        std::vector<m3hair::DeonParams> dparams;
+        for (const auto &h : all_hair) {
+            hair_ptrs.push_back(&h);
+            dparams.emplace_back();
+        }
+
+        const int total_tiles = ((a.width + 15) / 16) * ((a.height + 15) / 16);
+        std::atomic<int> done_tiles{0};
+        spdlog::info("Rendering {}x{} @ {} spp  mode={}  ({} tiles)",
+                     a.width,
+                     a.height,
+                     a.spp,
+                     a.mode,
+                     total_tiles);
+
+        auto t_start = std::chrono::steady_clock::now();
+
+        tbb::parallel_for(
+            tbb::blocked_range2d<int>(0, a.height, 16, 0, a.width, 16),
+            [&](const tbb::blocked_range2d<int> &r) {
+                for (int y = r.rows().begin(); y < r.rows().end(); ++y) {
+                    for (int x = r.cols().begin(); x < r.cols().end(); ++x) {
+                        m3hair::RNG rng((uint32_t)(y * a.width + x + 1));
+                        vec3 acc(0.f);
+                        for (int s = 0; s < a.spp; ++s) {
+                            Ray ray = cam.generate_ray(x + rng.next_f(), y + rng.next_f());
+                            acc =
+                                acc + m3hair::trace_path(
+                                          ray, scene.handle(), light, hair_ptrs, dparams, a.depth, rng);
+                        }
+                        img.at(x, y) = acc * (1.f / a.spp);
                     }
-                    img.at(x, y) = acc * (1.f / a.spp);
                 }
-            }
-            int t       = ++done_tiles;
-            int new_pct = (int)(100.f * t / total_tiles);
-            int old_pct = (int)(100.f * (t - 1) / total_tiles);
-            if ((new_pct / 10) > (old_pct / 10)) {
-                float elapsed =
-                    std::chrono::duration<float>(std::chrono::steady_clock::now() - t_start)
-                        .count();
-                spdlog::info("  {:3d}%  ({:.1f}s elapsed)", (new_pct / 10) * 10, elapsed);
-            }
-        });
+                int t       = ++done_tiles;
+                int new_pct = (int)(100.f * t / total_tiles);
+                int old_pct = (int)(100.f * (t - 1) / total_tiles);
+                if ((new_pct / 10) > (old_pct / 10)) {
+                    float elapsed =
+                        std::chrono::duration<float>(std::chrono::steady_clock::now() - t_start)
+                            .count();
+                    spdlog::info("  {:3d}%  ({:.1f}s elapsed)", (new_pct / 10) * 10, elapsed);
+                }
+            });
 
-    float total_s =
-        std::chrono::duration<float>(std::chrono::steady_clock::now() - t_start).count();
-    spdlog::info("Render complete in {:.2f}s", total_s);
+        float total_s =
+            std::chrono::duration<float>(std::chrono::steady_clock::now() - t_start).count();
+        spdlog::info("Render complete in {:.2f}s", total_s);
+    } // scene destroyed here (rtcReleaseScene) before rtcReleaseDevice
 
     std::filesystem::create_directories(std::filesystem::path(a.output).parent_path().empty()
                                             ? std::filesystem::path(".")
