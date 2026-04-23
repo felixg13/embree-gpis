@@ -2,3 +2,4 @@ build/
 build-profile/
 renders/
 compile_commands.json
+scratch/
