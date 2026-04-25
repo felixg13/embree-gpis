@@ -4,7 +4,7 @@
 #include "image.h"
 #include "integrator.h"
 #include "light.h"
-#include "math.h"
+#include <cmath>
 #include "scene.h"
 #include "gpis_geo.h"
 
@@ -13,12 +13,14 @@
 #include <cstdlib>
 #include <embree4/rtcore.h>
 #include <filesystem>
+#include <numbers>
 #include <print>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <string_view>
 #include <tbb/blocked_range2d.h>
 #include <tbb/parallel_for.h>
+#include <utility>
 #include <vector>
 
 struct Args {
@@ -28,9 +30,9 @@ struct Args {
     int height         = 600;
     int spp            = 16;
     int depth          = 4;
-    float spacing      = 2.0f;
-    float amplitude    = 0.f;
-    float cell_size    = 0.05f;
+    float spacing      = 2.0F;
+    float amplitude    = 0.F;
+    float cell_size    = 0.05F;
     std::string output = "renders/out.ppm";
     std::string mode   = "embree";
 };
@@ -61,25 +63,25 @@ static Args parse_args(int argc, char *argv[]) {
             }
             return argv[++i];
         };
-        if (s == "--width")
+        if (s == "--width") { {
             a.width = std::stoi(std::string(next()));
-        else if (s == "--height")
+        } } else if (s == "--height") { {
             a.height = std::stoi(std::string(next()));
-        else if (s == "--spp")
+        } } else if (s == "--spp") { {
             a.spp = std::stoi(std::string(next()));
-        else if (s == "--depth")
+        } } else if (s == "--depth") { {
             a.depth = std::stoi(std::string(next()));
-        else if (s == "--spacing")
+        } } else if (s == "--spacing") { {
             a.spacing = std::stof(std::string(next()));
-        else if (s == "-o")
+        } } else if (s == "-o") { {
             a.output = std::string(next());
-        else if (s == "--mode")
+        } } else if (s == "--mode") { {
             a.mode = std::string(next());
-        else if (s == "--amplitude")
+        } } else if (s == "--amplitude") { {
             a.amplitude = std::stof(std::string(next()));
-        else if (s == "--cell-size")
+        } } else if (s == "--cell-size") { {
             a.cell_size = std::stof(std::string(next()));
-        else if (s == "--rotate") {
+        } } else if (s == "--rotate") {
             std::string val = std::string(next());
             auto colon      = val.find(':');
             if (colon == std::string::npos) {
@@ -88,8 +90,9 @@ static Args parse_args(int argc, char *argv[]) {
             }
             int idx   = std::stoi(val.substr(0, colon));
             float deg = std::stof(val.substr(colon + 1));
-            if (idx >= (int)a.rotations.size())
-                a.rotations.resize(idx + 1, 0.f);
+            if (std::cmp_greater_equal(idx ,a.rotations.size())) {
+                a.rotations.resize(idx + 1, 0.F);
+}
             a.rotations[idx] = deg;
         } else if (s == "--help" || s == "-h") {
             usage(argv[0]);
@@ -98,19 +101,23 @@ static Args parse_args(int argc, char *argv[]) {
             spdlog::error("Unknown option: {}", s);
             std::exit(1);
         } else {
-            a.files.push_back(std::string(s));
+            a.files.emplace_back(s);
         }
     }
-    if (a.files.empty())
+    if (a.files.empty()) {
         a.files = {"assets/curl.m3hair", "assets/hair.m3hair"};
+}
     return a;
 }
 
 // fit all geometry into frame at ~85% fill
 static m3hair::Camera auto_camera(const std::vector<m3hair::HairData> &all_hair, int W, int H) {
-    float xmin = 1e30f, xmax = -1e30f;
-    float ymin = 1e30f, ymax = -1e30f;
-    float zmin = 1e30f, zmax = -1e30f;
+    float xmin = 1e30F;
+    float xmax = -1e30F;
+    float ymin = 1e30F;
+    float ymax = -1e30F;
+    float zmin = 1e30F;
+    float zmax = -1e30F;
     for (const auto &h : all_hair) {
         for (const auto &v : h.vertices) {
             xmin = std::min(xmin, v.x);
@@ -121,21 +128,23 @@ static m3hair::Camera auto_camera(const std::vector<m3hair::HairData> &all_hair,
             zmax = std::max(zmax, v.z);
         }
     }
-    float cx = (xmin + xmax) * 0.5f, cy = (ymin + ymax) * 0.5f;
-    float scene_w = xmax - xmin, scene_h = ymax - ymin;
-    float aspect   = (float)W / (float)H;
-    float fov_deg  = 65.f;
-    float half_fov = fov_deg * 0.5f * (3.14159265f / 180.f);
-    float d_from_w = (scene_w / aspect) / (2.f * std::tan(half_fov)) / 0.85f;
-    float d_from_h = scene_h / (2.f * std::tan(half_fov)) / 0.85f;
+    float cx = (xmin + xmax) * 0.5F;
+    float cy = (ymin + ymax) * 0.5F;
+    float scene_w = xmax - xmin;
+    float scene_h = ymax - ymin;
+    float aspect   = static_cast<float>(W) / static_cast<float>(H);
+    float fov_deg  = 65.F;
+    float half_fov = fov_deg * 0.5F * (std::numbers::pi_v<float> / 180.F);
+    float d_from_w = (scene_w / aspect) / (2.F * std::tan(half_fov)) / 0.85F;
+    float d_from_h = scene_h / (2.F * std::tan(half_fov)) / 0.85F;
     float d        = std::max(d_from_w, d_from_h);
     float cam_z    = zmax + d;
-    return m3hair::make_camera(W, H, {cx, cy, cam_z}, {cx, cy, (zmin + zmax) * 0.5f}, fov_deg);
+    return m3hair::make_camera(W, H, {cx, cy, cam_z}, {cx, cy, (zmin + zmax) * 0.5F}, fov_deg);
 }
 
 int main(int argc, char *argv[]) {
+    try {
     spdlog::set_pattern("[%T.%e] [%^%l%$] %v");
-
     Args a = parse_args(argc, argv);
 
     RTCDevice device = rtcNewDevice(nullptr);
@@ -147,9 +156,9 @@ int main(int argc, char *argv[]) {
     spdlog::info("Loading {} asset(s)", a.files.size());
     std::vector<m3hair::HairData> all_hair;
     all_hair.reserve(a.files.size());
-    for (int i = 0; i < (int)a.files.size(); ++i) {
-        vec3 offset   = {i * a.spacing, 0.f, 0.f};
-        float rot_deg = i < (int)a.rotations.size() ? a.rotations[i] : 0.f;
+    for (int i = 0; std::cmp_less(i ,a.files.size()); ++i) {
+        Vec3 offset   = {i * a.spacing, 0.F, 0.F};
+        float rot_deg = std::cmp_less(i ,a.rotations.size()) ? a.rotations[i] : 0.F;
         all_hair.push_back(m3hair::load_m3hair(a.files[i], offset, rot_deg));
         all_hair.back().amplitude = a.amplitude;
         all_hair.back().cell_size = a.cell_size;
@@ -162,10 +171,11 @@ int main(int argc, char *argv[]) {
     {
         m3hair::Scene scene(device);
         for (const auto &h : all_hair) {
-            if (a.mode == "raymarching")
+            if (a.mode == "raymarching") {
                 scene.add_user_hair(h);
-            else
+            } else {
                 scene.add_hair(h);
+}
         }
         scene.commit();
         spdlog::info("Scene committed");
@@ -197,20 +207,20 @@ int main(int argc, char *argv[]) {
             [&](const tbb::blocked_range2d<int> &r) {
                 for (int y = r.rows().begin(); y < r.rows().end(); ++y) {
                     for (int x = r.cols().begin(); x < r.cols().end(); ++x) {
-                        m3hair::RNG rng((uint32_t)(y * a.width + x + 1));
-                        vec3 acc(0.f);
+                        m3hair::RNG rng(static_cast<uint32_t>((y * a.width) + x + 1));
+                        Vec3 acc(0.F);
                         for (int s = 0; s < a.spp; ++s) {
                             Ray ray = cam.generate_ray(x + rng.next_f(), y + rng.next_f());
                             acc =
                                 acc + m3hair::trace_path(
                                           ray, scene.handle(), light, hair_ptrs, dparams, a.depth, rng);
                         }
-                        img.at(x, y) = acc * (1.f / a.spp);
+                        img.at(x, y) = acc * (1.F / a.spp);
                     }
                 }
                 int t       = ++done_tiles;
-                int new_pct = (int)(100.f * t / total_tiles);
-                int old_pct = (int)(100.f * (t - 1) / total_tiles);
+                int new_pct = static_cast<int>(100.F * t / total_tiles);
+                int old_pct = static_cast<int>(100.F * (t - 1) / total_tiles);
                 if ((new_pct / 10) > (old_pct / 10)) {
                     float elapsed =
                         std::chrono::duration<float>(std::chrono::steady_clock::now() - t_start)
@@ -232,4 +242,8 @@ int main(int argc, char *argv[]) {
 
     rtcReleaseDevice(device);
     return 0;
+    } catch (const std::exception &e) {
+        spdlog::error("Exception: {}", e.what());
+        return 1;
+    }
 }

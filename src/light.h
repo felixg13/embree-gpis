@@ -4,11 +4,11 @@
 namespace m3hair {
 
 struct DirectionalLight {
-    vec3 direction;
-    vec3 radiance;
+    Vec3 direction;
+    Vec3 radiance;
 
     static DirectionalLight make_default() {
-        return {normalize({0.f, 1.f, 2.f}), {80.f, 80.f, 80.f}};
+        return {.direction=normalize({0.F, 1.F, 2.F}), .radiance={80.F, 80.F, 80.F}};
     }
 };
 

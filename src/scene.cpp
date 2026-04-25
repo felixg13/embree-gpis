@@ -8,8 +8,9 @@ namespace m3hair {
 
 Scene::Scene(RTCDevice device) : m_device(device) {
     m_scene = rtcNewScene(m_device);
-    if (!m_scene)
+    if (!m_scene) {
         throw std::runtime_error("rtcNewScene failed");
+}
 }
 
 Scene::~Scene() {
@@ -25,7 +26,7 @@ void Scene::add_hair(const HairData &hair) {
                                RTC_FORMAT_FLOAT4,
                                hair.vertices.data(),
                                0,
-                               sizeof(float4),
+                               sizeof(Float4),
                                hair.vertices.size());
 
     rtcSetSharedGeometryBuffer(geom,

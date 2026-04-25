@@ -8,15 +8,15 @@
 namespace m3hair {
 
 struct HairData {
-    std::vector<float4> vertices;
+    std::vector<Float4> vertices;
     std::vector<int> indices;
     int num_curves   = 0;
     int num_segments = 0;
-    float amplitude  = 0.f;
-    float cell_size  = 0.05f;
+    float amplitude  = 0.F;
+    float cell_size  = 0.05F;
     uint32_t seed    = 0xdeadbeef;
 };
 
-HairData load_m3hair(const std::string &path, vec3 offset = {}, float rotate_y_deg = 0.f);
+HairData load_m3hair(const std::string &path, Vec3 offset = {}, float rotate_y_deg = 0.F);
 
 } // namespace m3hair
