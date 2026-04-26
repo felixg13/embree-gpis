@@ -4,7 +4,9 @@ Path tracer for hair rendered as Gaussian Process Implicit Surfaces (GPIS), buil
 
 | Embree curves | GPIS raymarching |
 |:---:|:---:|
-| ![](renders-push/profile16spp1000.png) | ![](renders-push/profile_gpis16spp1000.png) |
+| ![](renders/profile16spp1000.png) | ![](renders/profile_gpis_amp_0_4.png) |
+
+All renders are available in the [`renders/`](renders/) directory.
 
 ## Dependencies
 

@@ -1,5 +1,5 @@
 build/
 build-profile/
-renders/
+out/
 compile_commands.json
 scratch/

@@ -6,8 +6,8 @@ shift || true
 
 cmake --build build 2>&1 | grep -v "^\[" || true
 
-OUT="renders/${SCENE}.ppm"
-PNG="renders/${SCENE}.png"
+OUT="out/${SCENE}.ppm"
+PNG="out/${SCENE}.png"
 
 case "$SCENE" in
   instant)
