@@ -14,7 +14,7 @@ class Scene {
     void add_user_hair(const HairData &hair);
     void commit();
 
-    RTCScene handle() const { return m_scene; }
+    [[nodiscard]] RTCScene handle() const { return m_scene; }
 
   private:
     RTCDevice m_device;

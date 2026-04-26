@@ -12,7 +12,7 @@ namespace m3hair {
 
 struct RNG {
     uint32_t state;
-    explicit RNG(uint32_t seed) : state(seed | 1u) {}
+    explicit RNG(uint32_t seed) : state(seed | 1U) {}
 
     uint32_t next_u32() {
         state ^= state << 13;
@@ -20,12 +20,12 @@ struct RNG {
         state ^= state << 5;
         return state;
     }
-    float next_f() { return (next_u32() >> 8) * (1.f / (1u << 24)); }
+    float next_f() { return (next_u32() >> 8) * (1.F / (1U << 24)); }
 };
 
-vec3 bspline_tangent(const HairData &hair, unsigned primID, float u);
+Vec3 bspline_tangent(const HairData &hair, unsigned primID, float u);
 
-vec3 trace_path(const Ray &ray,
+Vec3 trace_path(const Ray &ray,
                 RTCScene scene,
                 const DirectionalLight &light,
                 const std::vector<const HairData *> &hairs,

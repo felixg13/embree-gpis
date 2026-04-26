@@ -1,8 +1,10 @@
 #include "hair_loader.h"
 
+#include <cstddef>
 #include <cstdio>
 #include <fstream>
 #include <spdlog/spdlog.h>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -10,21 +12,22 @@
 namespace m3hair {
 
 static void flush_block(HairData &out,
-                        std::vector<float4> &block,
+                        std::vector<Float4> &block,
                         int &variant,
-                        vec3 offset,
+                        Vec3 offset,
                         float cos_ry,
                         float sin_ry) {
-    if (block.empty())
+    if (block.empty()) {
         return;
+}
 
     if (variant == 0) {
         variant = static_cast<int>(block.size()) == 4 ? 4 : 67;
         if (variant == 67) {
-            out.vertices.reserve(10'000 * 67);
-            out.indices.reserve(10'000 * 64);
+            out.vertices.reserve(static_cast<std::size_t>(10'000 * 67));
+            out.indices.reserve(static_cast<std::size_t>(10'000 * 64));
         } else {
-            out.vertices.reserve(1'100'000 * 4);
+            out.vertices.reserve(static_cast<std::size_t>(1'100'000 * 4));
             out.indices.reserve(1'100'000);
         }
     }
@@ -32,8 +35,8 @@ static void flush_block(HairData &out,
     const int base = static_cast<int>(out.vertices.size());
 
     for (auto &v : block) {
-        float rx = v.x * cos_ry + v.z * sin_ry;
-        float rz = -v.x * sin_ry + v.z * cos_ry;
+        float rx = (v.x * cos_ry) + (v.z * sin_ry);
+        float rz = (-v.x * sin_ry) + (v.z * cos_ry);
         v.x      = rx + offset.x;
         v.y      = v.y + offset.y;
         v.z      = rz + offset.z;
@@ -45,8 +48,9 @@ static void flush_block(HairData &out,
         out.num_segments += 1;
     } else {
         const int n_segs = static_cast<int>(block.size()) - 3;
-        for (int i = 0; i < n_segs; ++i)
+        for (int i = 0; i < n_segs; ++i) {
             out.indices.push_back(base + i);
+}
         out.num_segments += n_segs;
     }
 
@@ -54,17 +58,18 @@ static void flush_block(HairData &out,
     block.clear();
 }
 
-HairData load_m3hair(const std::string &path, vec3 offset, float rotate_y_deg) {
+HairData load_m3hair(const std::string &path, Vec3 offset, float rotate_y_deg) {
     std::ifstream f(path);
-    if (!f)
+    if (!f) {
         throw std::runtime_error("Cannot open: " + path);
+}
 
-    const float rad    = rotate_y_deg * (3.14159265f / 180.f);
+    const float rad    = rotate_y_deg * (std::numbers::pi_v<float> / 180.F);
     const float cos_ry = std::cos(rad);
     const float sin_ry = std::sin(rad);
 
     HairData out;
-    std::vector<float4> block;
+    std::vector<Float4> block;
     block.reserve(67);
     int variant = 0;
 
@@ -74,9 +79,10 @@ HairData load_m3hair(const std::string &path, vec3 offset, float rotate_y_deg) {
             flush_block(out, block, variant, offset, cos_ry, sin_ry);
             continue;
         }
-        float4 v{};
-        if (std::sscanf(line.c_str(), "%f %f %f %f", &v.x, &v.y, &v.z, &v.w) == 4)
+        Float4 v{};
+        if (std::sscanf(line.c_str(), "%f %f %f %f", &v.x, &v.y, &v.z, &v.w) == 4) {
             block.push_back(v);
+}
     }
     flush_block(out, block, variant, offset, cos_ry, sin_ry);
 
@@ -86,7 +92,7 @@ HairData load_m3hair(const std::string &path, vec3 offset, float rotate_y_deg) {
         out.num_curves,
         out.num_segments,
         out.vertices.size(),
-        out.vertices.size() * sizeof(float4) / 1e6,
+        out.vertices.size() * sizeof(Float4) / 1e6,
         out.indices.size() * sizeof(int) / 1e6);
 
     return out;

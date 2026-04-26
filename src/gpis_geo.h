@@ -8,7 +8,7 @@
 namespace m3hair {
 
 struct CondState {
-    vec3 u_grad;
+    Vec3 u_grad;
     float u_val;
     bool valid;
 };
